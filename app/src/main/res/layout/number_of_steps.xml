@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:layout_gravity="center"
+    android:orientation="vertical"
+    android:padding="20dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/how_many_steps"
+        android:textColor="@color/black"
+        android:gravity="center"
+        android:textSize="18dp"
+        android:textStyle="bold">
+    </TextView>
+    <EditText
+        android:id="@+id/number_of_steps"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:text="0"
+        android:paddingRight="20dp"
+        android:paddingLeft="20dp"
+        android:layout_marginTop="20dp"
+        android:inputType="number">
+    </EditText>
+    <EditText
+        android:id="@+id/additional_notes"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:textAlignment="center"
+        android:hint="@string/additional_notes"
+        android:paddingRight="20dp"
+        android:paddingLeft="20dp"
+        android:layout_marginTop="20dp"
+        android:textStyle="italic">
+    </EditText>
+    <Button
+        android:id="@+id/save_new_test"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/save_new_test"
+        android:layout_marginTop="20dp"
+        android:layout_gravity="center">
+    </Button>
+
+</LinearLayout>
