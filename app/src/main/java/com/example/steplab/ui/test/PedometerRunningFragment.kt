@@ -287,10 +287,19 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
             counter++
         }
 
+        if (stepDetected) {
+            onStepDetected()
+        }
+
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // Ignored for now
+    }
+
+    private fun onStepDetected() {
+        stepCount++
+        stepCountTextView.text = stepCount.toString()
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {
