@@ -2,7 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.example.steplab">
 
+    <!-- Permission -->
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" /> <!-- ✅ aggiunto per correggere crash -->
 
     <application
         android:allowBackup="true"
@@ -12,6 +14,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Steplab">
 
+        <!-- Main Activity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -30,7 +33,7 @@
         <activity android:name=".ui.test.SelectTest" android:screenOrientation="portrait" />
         <activity android:name=".ui.test.SendTest" android:screenOrientation="portrait" />
 
-        <!-- Provider for file management -->
+        <!-- Provider -->
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.example.steplab.fileprovider"

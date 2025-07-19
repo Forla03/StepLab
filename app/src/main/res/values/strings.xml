@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Pedometers</string>
+    <string name="app_name">Steplab</string>
     <string name="button_new_configuration">New Configuration</string>
     <string name="button_start_pedometer">Start Pedometer</string>
     <string name="enter_settings">Enter Settings</string>
