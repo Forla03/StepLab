@@ -19,6 +19,7 @@ import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.MathContext
@@ -54,13 +55,14 @@ class ConfigurationsComparison : AppCompatActivity() {
             testApp = MainActivity.getDatabase()?.databaseDao()?.getTestFromId(testId.toInt()) ?: return@launch
             jsonObject = JSONObject(testApp.testValues)
 
-            lifecycleScope.launch(Dispatchers.Main) {
+            withContext(Dispatchers.Main) {
                 setupViews()
                 setupChart()
                 drawBaseLine()
                 setupRecyclerView()
-                processConfigurations()
             }
+
+            processConfigurationsAsync()
         }
     }
 
@@ -81,77 +83,104 @@ class ConfigurationsComparison : AppCompatActivity() {
     }
 
     private fun setupChart() {
-        chart.apply {
-            description.isEnabled = false
-            xAxis.setDrawLabels(false)
-            chartData = LineData()
-            data = chartData
-        }
-
-        val baseLine = LineDataSet(null, "Magnitude of Acceleration").apply {
-            color = Color.RED
-            setDrawCircles(false)
-            setDrawValues(false)
-        }
-
-        chartData.addDataSet(baseLine)
+        chart = findViewById(R.id.line_chart)
+        chart.description.isEnabled = false
+        chart.xAxis.setDrawLabels(false)
+        chartData = LineData()
+        chart.data = chartData
     }
 
     private fun drawBaseLine() {
+        val baseEntries = mutableListOf<Entry>()
         val keys = jsonObject.keys()
+        var index = 0
         while (keys.hasNext()) {
             val key = keys.next()
             val obj = jsonObject.getJSONObject(key)
             if (obj.has("acceleration_magnitude")) {
-                chartData.addEntry(Entry(counter.toFloat(), obj.getString("acceleration_magnitude").toFloat()), 0)
-                counter++
+                baseEntries.add(Entry(index.toFloat(), obj.getString("acceleration_magnitude").toFloat()))
+                index++
             }
         }
+        val baseLine = LineDataSet(baseEntries, "Magnitude of acceleration").apply {
+            color = Color.RED
+            setDrawCircles(false)
+            setDrawValues(false)
+            lineWidth = 2f
+        }
+        chartData.addDataSet(baseLine)
         chartData.notifyDataChanged()
         chart.notifyDataSetChanged()
-        chart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+        chart.invalidate()
     }
 
     private fun setupRecyclerView() {
         recyclerView.apply {
-            val chartDataSets = ArrayList<LineDataSet>().apply {
-                for (set in chartData.dataSets) {
-                    if (set is LineDataSet) add(set)
-                }
-            }
-
             adapter = AdapterForConfigurationsCard(
                 configurations = dataset,
                 colors = colorDataset,
                 stepCounts = stepDataset,
-                chartDataSets = chartDataSets,
+                chartDataSets = chartData.dataSets.filterIsInstance<LineDataSet>() as ArrayList<LineDataSet>,
                 context = this@ConfigurationsComparison,
                 fullChartData = chartData,
                 chart = chart
             )
-
             layoutManager = LinearLayoutManager(this@ConfigurationsComparison)
             setHasFixedSize(true)
         }
     }
 
-    private fun processConfigurations() {
-        for ((index, config) in configurations.withIndex()) {
-            val clonedConfig = config.clone() as Configuration
-            val context = ConfigurationContext(clonedConfig, colors[index], index, chart, chartData)
+    private suspend fun processConfigurationsAsync() {
+        val dataSets = mutableListOf<LineDataSet>()
+        val stepsList = mutableListOf<Int>()
+        val configsCloned = mutableListOf<Configuration>()
+        val colorsUsed = mutableListOf<Int>()
 
-            val keys = jsonObject.keys()
-            while (keys.hasNext()) {
-                val key = keys.next()
-                val event = jsonObject.getJSONObject(key)
-                context.runDetection(key.toLong(), event)
+        withContext(Dispatchers.Default) {
+            for ((index, config) in configurations.withIndex()) {
+                val configColor = colors[index % colors.size]
+                val configDataSet = LineDataSet(mutableListOf(), "${index + 1}").apply {
+                    color = configColor
+                    setCircleColor(configColor)
+                    setDrawCircles(true)
+                    circleRadius = 4f
+                    setDrawValues(false)
+                    lineWidth = 2f
+                }
+
+                val clonedConfig = config.clone() as Configuration
+                val context = ConfigurationContext(clonedConfig)
+
+                val keys = jsonObject.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    val event = jsonObject.getJSONObject(key)
+                    context.runDetection(key.toLong(), event)
+                }
+
+                configDataSet.values = context.getEntries()
+
+                configsCloned.add(clonedConfig)
+                colorsUsed.add(configColor)
+                stepsList.add(context.stepsCount)
+                dataSets.add(configDataSet)
+            }
+        }
+
+        withContext(Dispatchers.Main) {
+            for (dataSet in dataSets) {
+                chartData.addDataSet(dataSet)
             }
 
-            dataset.add(clonedConfig)
-            colorDataset.add(colors[index])
-            stepDataset.add(context.stepsCount)
+            dataset.addAll(configsCloned)
+            colorDataset.addAll(colorsUsed)
+            stepDataset.addAll(stepsList)
+
+            chartData.notifyDataChanged()
+            chart.notifyDataSetChanged()
+            chart.invalidate()
+            recyclerView.adapter?.notifyDataSetChanged()
         }
-        recyclerView.adapter?.notifyDataSetChanged()
     }
 
     @Deprecated("Deprecated in Java")
@@ -160,13 +189,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         startActivity(Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
     }
 
-    private inner class ConfigurationContext(
-        val configuration: Configuration,
-        val color: Int,
-        val index: Int,
-        val chart: LineChart,
-        val chartData: LineData
-    ) {
+    private inner class ConfigurationContext(val configuration: Configuration) {
         val accelerometer = SensorData()
         val accelerometerXAxis = SensorData()
         val magnetometer = SensorData()
@@ -187,6 +210,9 @@ class ConfigurationsComparison : AppCompatActivity() {
         var firstSignal = true
         var stepsCount = 0
 
+        private val entries = mutableListOf<Entry>()
+        private var internalCounter = 0
+
         fun runDetection(instant: Long, event: JSONObject) {
             stepDetected = false
 
@@ -198,23 +224,18 @@ class ConfigurationsComparison : AppCompatActivity() {
 
             if (configuration.realTimeMode == 0) {
                 applyFilterAndDetection(instant)
-
-                if (configuration.recognitionAlgorithm == 1) {
-                    applyIntersectionCorrection(instant)
-                }
-
+                if (configuration.recognitionAlgorithm == 1) applyIntersectionCorrection(instant)
                 if (stepDetected) {
                     stepsCount++
-                    chartData.addEntry(Entry(counter.toFloat(), lastAccelerationMagnitude!!.toFloat()), index + 1)
-                    chartData.notifyDataChanged()
-                    chart.notifyDataSetChanged()
-                    chart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    entries.add(Entry(internalCounter.toFloat(), lastAccelerationMagnitude!!.toFloat()))
                 }
             }
         }
 
+        fun getEntries(): List<Entry> = entries
+
         private fun processAccelerometerEvent(event: JSONObject) {
-            counter++
+            internalCounter++
             lastAccelerationMagnitude = BigDecimal(event.getString("acceleration_magnitude"))
             val vector = arrayOf(
                 BigDecimal(event.getString("acceleration_x")),

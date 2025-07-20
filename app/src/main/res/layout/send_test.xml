@@ -3,7 +3,9 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:paddingTop="?attr/actionBarSize">
 
     <TextView
         android:id="@+id/textView2"
@@ -16,28 +18,25 @@
         android:text="@string/send_test"
         android:textColor="@color/black"
         android:textSize="20dp"
-        android:textStyle="bold">
-    </TextView>
+        android:textStyle="bold" />
+
     <View
         android:layout_width="match_parent"
         android:layout_height="0.1dp"
         android:layout_marginTop="10dp"
-        android:background="@color/design_default_color_primary">
-    </View>
+        android:background="@color/design_default_color_primary" />
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1">
-    </androidx.recyclerview.widget.RecyclerView>
+        android:layout_weight="1" />
 
     <View
         android:layout_width="match_parent"
         android:layout_height="2dp"
         android:layout_marginTop="10dp"
-        android:background="@color/design_default_color_primary">
-    </View>
+        android:background="@color/design_default_color_primary" />
 
     <Button
         android:id="@+id/send_test"
@@ -46,10 +45,6 @@
         android:layout_weight="0"
         android:layout_margin="10dp"
         android:enabled="false"
-        android:text="@string/send">
-    </Button>
-
-
-
+        android:text="@string/send" />
 
 </LinearLayout>
