@@ -13,6 +13,7 @@ import com.example.steplab.MainActivity
 import com.example.steplab.R
 import com.example.steplab.data.local.EntityTest
 import kotlinx.coroutines.launch
+import org.json.JSONObject
 import java.io.File
 
 class SendTest : AppCompatActivity() {
@@ -62,21 +63,43 @@ class SendTest : AppCompatActivity() {
             dataset.forEach { card ->
                 if (card.selected) {
                     val file = File(applicationContext.filesDir, card.filePathName)
-                    val uri = FileProvider.getUriForFile(
-                        applicationContext,
-                        "com.example.steplab.fileprovider",
-                        file
-                    )
-                    filesToShare.add(uri)
+                    if (file.exists()) {
+                        val uri = FileProvider.getUriForFile(
+                            applicationContext,
+                            "com.example.steplab.fileprovider",
+                            file
+                        )
+                        filesToShare.add(uri)
+                    } else {
+                        // Create file if it doesn't exist (for legacy tests)
+                        try {
+                            val exportData = JSONObject().apply {
+                                put("test_values", card.testValues)
+                                put("number_of_steps", card.numberOfSteps.toString())
+                                put("additional_notes", card.additionalNotes)
+                            }
+                            file.writeText(exportData.toString())
+                            
+                            val uri = FileProvider.getUriForFile(
+                                applicationContext,
+                                "com.example.steplab.fileprovider",
+                                file
+                            )
+                            filesToShare.add(uri)
+                        } catch (e: Exception) {
+                            println("Error creating file: ${file.absolutePath} - ${e.message}")
+                        }
+                    }
                 }
             }
 
             if (filesToShare.isNotEmpty()) {
                 val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = "text/*"
+                    type = "*/*"
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, filesToShare)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                startActivity(shareIntent)
+                startActivity(Intent.createChooser(shareIntent, "Share test files via"))
             }
         }
     }

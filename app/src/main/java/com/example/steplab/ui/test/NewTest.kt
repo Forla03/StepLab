@@ -24,6 +24,7 @@ import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
 import kotlinx.coroutines.launch
 import org.json.JSONObject
+import java.io.File
 import java.math.BigDecimal
 import java.util.LinkedHashMap
 
@@ -104,10 +105,22 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                 lifecycleScope.launch {
                     try {
                         MainActivity.getDatabase()?.let { db ->
+                            val fileName = System.currentTimeMillis().toString()
+                            val testValuesJson = JSONObject(testData as Map<*, *>).toString()
+                            
+                            // Create the physical file
+                            val file = File(applicationContext.filesDir, fileName)
+                            val exportData = JSONObject().apply {
+                                put("test_values", testValuesJson)
+                                put("number_of_steps", stepCount)
+                                put("additional_notes", notesInput.text.toString())
+                            }
+                            file.writeText(exportData.toString())
+                            
                             val entity = EntityTest(
-                                fileName = System.currentTimeMillis().toString(),
+                                fileName = fileName,
                                 numberOfSteps = stepCount.toIntOrNull() ?: 0,
-                                testValues = JSONObject(testData as Map<*, *>).toString(),
+                                testValues = testValuesJson,
                                 additionalNotes = notesInput.text.toString()
                             )
                             db.databaseDao()?.insertTest(entity)
