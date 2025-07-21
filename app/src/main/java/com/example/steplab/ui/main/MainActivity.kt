@@ -125,7 +125,7 @@ class MainActivity : AppCompatActivity() {
                     val testValues = jsonObject.getString("test_values")
                     val numberOfSteps = jsonObject.getString("number_of_steps").toInt()
                     val additionalNotes = jsonObject.getString("additional_notes")
-                    val fileName = "imported_test_${System.currentTimeMillis()}"
+                    val fileName = "imported_test_${System.currentTimeMillis()}.json"
 
                     // Create the physical file
                     val file = File(applicationContext.filesDir, fileName)

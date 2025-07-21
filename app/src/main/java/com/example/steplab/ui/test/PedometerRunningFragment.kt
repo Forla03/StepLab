@@ -53,6 +53,20 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     private var stepCount: Int = 0
     private var counter: Int = 0
     private var timestamp: Long = 0
+    
+    // Reuse Calendar instance to avoid frequent object creation
+    private val calendar = Calendar.getInstance()
+    
+    // Reuse BigDecimal arrays to reduce object creation
+    private val reusableValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+    private val reusableMagnetometerValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+    private val reusableGravityValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
+    
+    // Throttling for rotation matrix calculations (very expensive)
+    private var rotationMatrixUpdateCounter = 0
+    
+    // Cache last world acceleration values to avoid recalculating every time
+    private var lastWorldValues: Array<BigDecimal>? = null
 
     private lateinit var chartLine: LineDataSet
     private lateinit var chartData: LineData
@@ -84,7 +98,8 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         stepDetection = StepDetection(configuration)
         configuration.lastDetectedStepTime = 0L
 
-        currentSecond = Calendar.getInstance().get(Calendar.SECOND)
+        calendar.timeInMillis = System.currentTimeMillis()
+        currentSecond = calendar.get(Calendar.SECOND)
         firstSecond = currentSecond
         stepCount = 0
         counter = 0
@@ -159,9 +174,20 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        sensorManager.registerListener(this, accelerometer, samplingPeriodMicros)
-        sensorManager.registerListener(this, magnetometer, samplingPeriodMicros)
-        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST)
+        // Use a slightly throttled sampling rate to balance performance and responsiveness
+        val actualSamplingRate = when {
+            samplingPeriodMicros == SensorManager.SENSOR_DELAY_FASTEST -> SensorManager.SENSOR_DELAY_GAME
+            samplingPeriodMicros < SensorManager.SENSOR_DELAY_UI -> SensorManager.SENSOR_DELAY_UI
+            else -> samplingPeriodMicros
+        }
+        sensorManager.registerListener(this, accelerometer, actualSamplingRate)
+        sensorManager.registerListener(this, magnetometer, actualSamplingRate)
+        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorManager.unregisterListener(this)
     }
 
     override fun onSensorChanged(event: SensorEvent) {
@@ -171,15 +197,16 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
                 isAccelerometerEvent = true
-                val values = arrayOf(
-                    BigDecimal.valueOf(event.values[0].toDouble()),
-                    BigDecimal.valueOf(event.values[1].toDouble()),
-                    BigDecimal.valueOf(event.values[2].toDouble())
-                )
-                accelerometerData.rawValues = values
-                accelerometerXAxis.rawValues = values
+                // Reuse array to reduce object creation
+                reusableValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
+                reusableValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
+                reusableValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
+                
+                accelerometerData.rawValues = reusableValues
+                accelerometerXAxis.rawValues = reusableValues
 
-                val second = Calendar.getInstance().get(Calendar.SECOND)
+                calendar.timeInMillis = timestamp
+                val second = calendar.get(Calendar.SECOND)
                 if (second != firstSecond) {
                     if (second == currentSecond) {
                         sensorEventCount++
@@ -202,20 +229,18 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
 
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 isAccelerometerEvent = false
-                magnetometerData.rawValues = arrayOf(
-                    BigDecimal.valueOf(event.values[0].toDouble()),
-                    BigDecimal.valueOf(event.values[1].toDouble()),
-                    BigDecimal.valueOf(event.values[2].toDouble())
-                )
+                reusableMagnetometerValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
+                reusableMagnetometerValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
+                reusableMagnetometerValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
+                magnetometerData.rawValues = reusableMagnetometerValues
             }
 
             Sensor.TYPE_GRAVITY -> {
                 isAccelerometerEvent = false
-                configuration.gravity = calculations.resultant(arrayOf(
-                    BigDecimal.valueOf(event.values[0].toDouble()),
-                    BigDecimal.valueOf(event.values[1].toDouble()),
-                    BigDecimal.valueOf(event.values[2].toDouble())
-                ))
+                reusableGravityValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
+                reusableGravityValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
+                reusableGravityValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
+                configuration.gravity = calculations.resultant(reusableGravityValues)
             }
         }
 
@@ -231,6 +256,11 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
                     chartLine.label = "Acceleration - Bagilevi Filter"
                     chartData = lineChart.data
                     chartData.addEntry(Entry(counter.toFloat(), filtered.toFloat()), 0)
+                    chartData.notifyDataChanged()
+                    lineChart.notifyDataSetChanged()
+                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    lineChart.moveViewToX(chartData.entryCount.toFloat())
+                    counter++
                 }
 
                 1 -> { // Low-pass Filter
@@ -246,6 +276,11 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
                     chartLine.label = "Acceleration - Low Pass Filter"
                     chartData = lineChart.data
                     chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
+                    chartData.notifyDataChanged()
+                    lineChart.notifyDataSetChanged()
+                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    lineChart.moveViewToX(chartData.entryCount.toFloat())
+                    counter++
                 }
 
                 2 -> { // No Filter
@@ -259,32 +294,60 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
                     chartLine.label = "Acceleration - No Filter"
                     chartData = lineChart.data
                     chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
+                    chartData.notifyDataChanged()
+                    lineChart.notifyDataSetChanged()
+                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    lineChart.moveViewToX(chartData.entryCount.toFloat())
+                    counter++
                 }
 
                 3 -> { // Rotation Matrix Filter
                     if (accelerometerData.instantiated && magnetometerData.instantiated) {
-                        calculations.updateRotationMatrix(accelerometerData.rawValues, magnetometerData.rawValues)
-                        val worldValues = calculations.worldAcceleration(accelerometerData.rawValues)
-                        accelerometerData.worldValues = worldValues
-
-                        val zAxis = worldValues[2]
-                        if (keyValueRecognition.recognizeLocalExtremaRealtime(zAxis, timestamp)) {
-                            stepDetected = stepDetection.detectStepByPeakDifference()
+                        // Throttle rotation matrix calculations - very expensive operation
+                        rotationMatrixUpdateCounter++
+                        if (rotationMatrixUpdateCounter % 5 == 0) { // Update rotation matrix every 5th accelerometer event
+                            calculations.updateRotationMatrix(accelerometerData.rawValues, magnetometerData.rawValues)
+                            // Recalculate world values when rotation matrix is updated
+                            lastWorldValues = calculations.worldAcceleration(accelerometerData.rawValues)
+                            accelerometerData.worldValues = lastWorldValues!!
+                        } else if (lastWorldValues != null) {
+                            // Use cached rotation matrix for world acceleration calculation (much faster)
+                            lastWorldValues = calculations.worldAcceleration(accelerometerData.rawValues)
+                            accelerometerData.worldValues = lastWorldValues!!
                         }
 
-                        chartLine.label = "Acceleration - Rotation Matrix Filter (Z axis)"
-                        chartData = lineChart.data
-                        chartData.addEntry(Entry(counter.toFloat(), zAxis.toFloat()), 0)
+                        // Always update chart and step detection for fluidity
+                        if (lastWorldValues != null) {
+                            val zAxis = lastWorldValues!![2]
+                            if (keyValueRecognition.recognizeLocalExtremaRealtime(zAxis, timestamp)) {
+                                stepDetected = stepDetection.detectStepByPeakDifference()
+                            }
+
+                            chartLine.label = "Acceleration - Rotation Matrix Filter (Z axis)"
+                            chartData = lineChart.data
+                            chartData.addEntry(Entry(counter.toFloat(), zAxis.toFloat()), 0)
+                            chartData.notifyDataChanged()
+                            lineChart.notifyDataSetChanged()
+                            lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                            lineChart.moveViewToX(chartData.entryCount.toFloat())
+                            counter++
+                        }
                     }
                 }
             }
 
-            // Common chart update logic
-            chartData.notifyDataChanged()
-            lineChart.notifyDataSetChanged()
-            lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-            lineChart.moveViewToX(chartData.entryCount.toFloat())
-            counter++
+            if (configuration.recognitionAlgorithm == 1) {
+                if (isAccelerometerEvent) {
+                    val magnitude = calculations.resultant(accelerometerXAxis.rawValues)
+                    accelerometerXAxis.resultant = magnitude
+                    val linear = calculations.linearAcceleration(magnitude)
+                    accelerometerXAxis.linearResultant = linear
+                    keyValueRecognition.recognizeXAxisIntersectionRealtime(linear, timestamp)
+                    stepDetected = stepDetected && stepDetection.detectStepByCrossing()
+                } else {
+                    stepDetected = false
+                }
+            }
         }
 
         if (stepDetected) {

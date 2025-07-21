@@ -105,18 +105,32 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                 lifecycleScope.launch {
                     try {
                         MainActivity.getDatabase()?.let { db ->
-                            val fileName = System.currentTimeMillis().toString()
+                            val firstTimestamp = testData.keys.firstOrNull()?.toLongOrNull() ?: System.currentTimeMillis()
+                            val calendar = java.util.Calendar.getInstance().apply {
+                                timeInMillis = firstTimestamp
+                            }
+
+                            val fileName = String.format(
+                                "%04d-%02d-%02d_%02d:%02d:%02d.txt",
+                                calendar.get(java.util.Calendar.YEAR),
+                                calendar.get(java.util.Calendar.MONTH) + 1,
+                                calendar.get(java.util.Calendar.DAY_OF_MONTH),
+                                calendar.get(java.util.Calendar.HOUR_OF_DAY),
+                                calendar.get(java.util.Calendar.MINUTE),
+                                calendar.get(java.util.Calendar.SECOND)
+                            )
+
                             val testValuesJson = JSONObject(testData as Map<*, *>).toString()
-                            
-                            // Create the physical file
-                            val file = File(applicationContext.filesDir, fileName)
                             val exportData = JSONObject().apply {
-                                put("test_values", testValuesJson)
                                 put("number_of_steps", stepCount)
                                 put("additional_notes", notesInput.text.toString())
+                                put("test_values", JSONObject(testData as Map<*, *>))
                             }
+
+                            val file = File(applicationContext.filesDir, fileName)
                             file.writeText(exportData.toString())
-                            
+                            file.setReadable(true, false)
+
                             val entity = EntityTest(
                                 fileName = fileName,
                                 numberOfSteps = stepCount.toIntOrNull() ?: 0,
@@ -126,8 +140,10 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                             db.databaseDao()?.insertTest(entity)
 
                             Toast.makeText(this@NewTest, getString(R.string.new_test_saved), Toast.LENGTH_SHORT).show()
-                            startActivity(Intent(applicationContext, MainActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+                            startActivity(
+                                Intent(applicationContext, MainActivity::class.java)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                            )
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
@@ -135,9 +151,10 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                     }
                 }
             } else {
-                Toast.makeText(this, getString(R.string.number_steps_error), Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@NewTest, getString(R.string.number_steps_error), Toast.LENGTH_SHORT).show()
             }
         }
+
 
         dialog.show()
     }

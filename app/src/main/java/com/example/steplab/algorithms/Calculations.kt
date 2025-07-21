@@ -29,6 +29,14 @@ class Calculations(
     private val rotationMatrix = FloatArray(16)
     private val gravity = FloatArray(3)
     private val geomagnetic = FloatArray(3)
+    
+    // Reuse arrays to reduce object creation in rotation matrix calculations
+    private val worldResult = Array(3) { BigDecimal.ZERO }
+    
+    // Cache for rotation matrix to avoid expensive recalculations
+    private val lastAccel = FloatArray(3)
+    private val lastMagnet = FloatArray(3)
+    private var rotationMatrixCached = false
 
     /**
      * Calculates and stores the 3x3 rotation matrix based on accelerometer and magnetometer readings.
@@ -37,38 +45,54 @@ class Calculations(
         accel: Array<BigDecimal>,
         magnet: Array<BigDecimal>
     ) {
+        // Check if values have changed significantly to avoid unnecessary recalculations
+        var hasChanged = !rotationMatrixCached
+        for (i in accel.indices) {
+            val newAccel = accel[i].toFloat()
+            val newMagnet = magnet[i].toFloat()
+            if (Math.abs(newAccel - lastAccel[i]) > 0.1f || Math.abs(newMagnet - lastMagnet[i]) > 0.1f) {
+                hasChanged = true
+            }
+            lastAccel[i] = newAccel
+            lastMagnet[i] = newMagnet
+        }
+        
+        if (!hasChanged) return // Skip expensive calculation if values haven't changed much
+        
         // copy sensor values to float arrays
         for (i in accel.indices) {
             gravity[i] = accel[i].toFloat()
             geomagnetic[i] = magnet[i].toFloat()
         }
 
-        SensorManager.getRotationMatrix(rotationMatrix, null, gravity, geomagnetic)
-
-        // store only the 3x3 part
-        val matrix3x3 = Array(3) { row ->
-            Array(3) { col ->
-                BigDecimal.valueOf(rotationMatrix[row * 4 + col].toDouble())
+        val success = SensorManager.getRotationMatrix(rotationMatrix, null, gravity, geomagnetic)
+        if (success) {
+            // store only the 3x3 part
+            val matrix3x3 = Array(3) { row ->
+                Array(3) { col ->
+                    BigDecimal.valueOf(rotationMatrix[row * 4 + col].toDouble())
+                }
             }
+            configuration.rotationMatrix = matrix3x3
+            rotationMatrixCached = true
         }
-        configuration.rotationMatrix = matrix3x3
     }
 
     /**
      * Transforms accelerometer readings to fixed (world) coordinate system.
      */
     fun worldAcceleration(accel: Array<BigDecimal>): Array<BigDecimal> {
-        val result = Array(3) { BigDecimal.ZERO }
         for (i in 0 until 3) {
             var sum = BigDecimal.ZERO
             for (j in 0 until 3) {
                 sum = sum.add(
                     configuration.rotationMatrix[i][j]
-                        .multiply(accel[j], MathContext.DECIMAL32)
+                        .multiply(accel[j], MathContext.DECIMAL32),
+                    MathContext.DECIMAL32
                 )
             }
-            result[i] = sum
+            worldResult[i] = sum
         }
-        return result
+        return worldResult
     }
 }

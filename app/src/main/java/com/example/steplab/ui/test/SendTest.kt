@@ -71,19 +71,24 @@ class SendTest : AppCompatActivity() {
                         )
                         filesToShare.add(uri)
                     } else {
-                        // Create file if it doesn't exist (for legacy tests)
                         try {
+                            val fileWithExtension = if (card.filePathName.endsWith(".json")) {
+                                File(applicationContext.filesDir, card.filePathName)
+                            } else {
+                                File(applicationContext.filesDir, "${card.filePathName}.json")
+                            }
+                            
                             val exportData = JSONObject().apply {
                                 put("test_values", card.testValues)
                                 put("number_of_steps", card.numberOfSteps.toString())
                                 put("additional_notes", card.additionalNotes)
                             }
-                            file.writeText(exportData.toString())
+                            fileWithExtension.writeText(exportData.toString())
                             
                             val uri = FileProvider.getUriForFile(
                                 applicationContext,
                                 "com.example.steplab.fileprovider",
-                                file
+                                fileWithExtension
                             )
                             filesToShare.add(uri)
                         } catch (e: Exception) {
@@ -95,7 +100,7 @@ class SendTest : AppCompatActivity() {
 
             if (filesToShare.isNotEmpty()) {
                 val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = "*/*"
+                    type = "text/plain"
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, filesToShare)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
