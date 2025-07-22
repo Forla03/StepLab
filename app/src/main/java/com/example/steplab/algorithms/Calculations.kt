@@ -45,20 +45,7 @@ class Calculations(
         accel: Array<BigDecimal>,
         magnet: Array<BigDecimal>
     ) {
-        // Check if values have changed significantly to avoid unnecessary recalculations
-        var hasChanged = !rotationMatrixCached
-        for (i in accel.indices) {
-            val newAccel = accel[i].toFloat()
-            val newMagnet = magnet[i].toFloat()
-            if (Math.abs(newAccel - lastAccel[i]) > 0.1f || Math.abs(newMagnet - lastMagnet[i]) > 0.1f) {
-                hasChanged = true
-            }
-            lastAccel[i] = newAccel
-            lastMagnet[i] = newMagnet
-        }
-        
-        if (!hasChanged) return // Skip expensive calculation if values haven't changed much
-        
+
         // copy sensor values to float arrays
         for (i in accel.indices) {
             gravity[i] = accel[i].toFloat()
