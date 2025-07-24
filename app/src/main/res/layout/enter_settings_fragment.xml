@@ -256,6 +256,21 @@
                     android:text="@string/bagilevi_filter">
                 </RadioButton>
             </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:orientation="horizontal">
+                <RadioButton
+                    android:id="@+id/filter_butterworth"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1.0"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="@string/butterworth_filter">
+                </RadioButton>
+            </LinearLayout>
         </LinearLayout>
         <View
             android:layout_width="match_parent"

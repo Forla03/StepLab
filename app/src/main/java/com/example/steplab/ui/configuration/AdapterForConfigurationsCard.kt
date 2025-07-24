@@ -91,6 +91,10 @@ class AdapterForConfigurationsCard(
                 holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.rotation_filter)
                 holder.frequency.visibility = View.GONE
             }
+            4 -> {
+                holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.butterworth_filter)
+                holder.frequency.visibility = View.GONE
+            }
         }
 
         // Click listeners to highlight line

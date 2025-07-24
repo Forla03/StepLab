@@ -245,7 +245,10 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         }
 
         if (configuration.realTimeMode == 0 && isAccelerometerEvent) {
-            when (configuration.filterType) {
+            // In live testing, prevent using Butterworth filter - default to no filter
+            val actualFilterType = if (configuration.filterType == 4) 2 else configuration.filterType
+            
+            when (actualFilterType) {
                 0 -> { // Bagilevi Filter
                     val filtered = filters.bagileviFilter(accelerometerData.rawValues)
                     accelerometerData.filteredResultant = filtered
