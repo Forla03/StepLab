@@ -33,7 +33,7 @@ class LiveTesting : AppCompatActivity() {
                 .unregisterListener(pedometerRunningFragment)
 
             supportFragmentManager.beginTransaction()
-                .replace(R.id.frame_layout, EnterSettingsFragment(configuration!!))
+                .replace(R.id.frame_layout, EnterSettingsFragment(configuration!!, true, true))
                 .commit()
 
             newPedometerButton.visibility = View.GONE

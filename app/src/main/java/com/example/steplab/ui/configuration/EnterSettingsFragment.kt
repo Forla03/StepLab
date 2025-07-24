@@ -13,7 +13,8 @@ import java.math.BigDecimal
 
 class EnterSettingsFragment(
     private val configuration: Configuration = Configuration(),
-    private val showSamplingRate: Boolean = true
+    private val showSamplingRate: Boolean = true,
+    private val isLiveTesting: Boolean = false
 ) : Fragment() {
 
     private var first = true
@@ -35,6 +36,7 @@ class EnterSettingsFragment(
     private var filterLowPass: RadioButton? = null
     private var noFilter: RadioButton? = null
     private var filterRotation: RadioButton? = null
+    private var filterButterworth: RadioButton? = null
 
     private var cutoffTwo: RadioButton? = null
     private var cutoffThree: RadioButton? = null
@@ -70,6 +72,7 @@ class EnterSettingsFragment(
         filterLowPass = root.findViewById(R.id.filter_low_pass)
         noFilter = root.findViewById(R.id.no_filter)
         filterRotation = root.findViewById(R.id.filter_rotation)
+        filterButterworth = root.findViewById(R.id.filter_butterworth)
 
         cutoffTwo = root.findViewById(R.id.cutoff_two)
         cutoffThree = root.findViewById(R.id.cutoff_three)
@@ -85,6 +88,11 @@ class EnterSettingsFragment(
             textSamplingRate?.visibility = View.GONE
             layoutSamplingRate?.visibility = View.GONE
             firstView?.visibility = View.GONE
+        }
+
+        // Hide Butterworth filter for live testing (real-time mode)
+        if (isLiveTesting) {
+            filterButterworth?.visibility = View.GONE
         }
 
         setupListeners()
@@ -189,6 +197,26 @@ class EnterSettingsFragment(
             }
         }
 
+        filterButterworth?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                if (isLiveTesting) {
+                    // Prevent selection of Butterworth filter in live testing
+                    filterButterworth?.isChecked = false
+                    // Default to Low-Pass filter instead
+                    filterLowPass?.isChecked = true
+                    configuration.filterType = 1
+                    configuration.detectionThreshold = BigDecimal.valueOf(5)
+                    showCutoffFrequency()
+                    uncheckAllFiltersExcept(filterLowPass)
+                } else {
+                    configuration.filterType = 4
+                    configuration.detectionThreshold = BigDecimal.valueOf(5)
+                    hideCutoffFrequency()
+                    uncheckAllFiltersExcept(filterButterworth)
+                }
+            }
+        }
+
         cutoffTwo?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) setCutoff(0)
         }
@@ -210,7 +238,7 @@ class EnterSettingsFragment(
     }
 
     private fun uncheckAllFiltersExcept(checked: RadioButton?) {
-        listOf(filterBagilevi, filterLowPass, noFilter, filterRotation)
+        listOf(filterBagilevi, filterLowPass, noFilter, filterRotation, filterButterworth)
             .filter { it != checked }
             .forEach { it?.isChecked = false }
     }
@@ -245,7 +273,7 @@ class EnterSettingsFragment(
             samplingTwenty, samplingForty, samplingFifty, samplingHundred, samplingMax,
             modalityRealTime, modalityNotRealTime,
             recognitionPeak, recognitionIntersection,
-            filterBagilevi, filterLowPass, noFilter, filterRotation,
+            filterBagilevi, filterLowPass, noFilter, filterRotation, filterButterworth,
             cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty,
             cutoffFrequencyLayout, layoutSamplingRate, textSamplingRate, firstView
         ).forEach { it?.isEnabled = false }

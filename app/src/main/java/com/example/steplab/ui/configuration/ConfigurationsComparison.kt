@@ -335,6 +335,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                     1 -> applyLowPassFilter(instant)
                     2 -> applyNoFilter(instant)
                     3 -> applyRotationMatrixFilter(instant)
+                    4 -> applyButterworthFilter(instant)
                 }
 
                 if (configuration.recognitionAlgorithm == 1) {
@@ -343,6 +344,8 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                 if (stepDetected) {
                     stepsCount++
+                    // Update parameters for Butterworth dynamic cutoff
+                    updateButterworthParameters(instant)
                     // Store chart entry instead of adding directly to chart
                     chartEntries.add(Entry(counter.toFloat(), lastAccelerationMagnitude!!.toFloat()))
                 }
@@ -437,6 +440,54 @@ class ConfigurationsComparison : AppCompatActivity() {
                 stepDetected = stepDetected && stepDetection.detectStepByCrossing()
             } else {
                 stepDetected = false
+            }
+        }
+
+        private fun applyButterworthFilter(instant: Long) {
+            if (accelerometerEvent) {
+                // Update sampling frequency dynamically (similar to low-pass filter)
+                date = Calendar.getInstance().apply { timeInMillis = instant }
+                val second = date!!.get(Calendar.SECOND)
+
+                if (firstSignal) {
+                    firstSecond = second
+                    currentSecond = second
+                    firstSignal = false
+                }
+
+                if (second == firstSecond) {
+                    signalCount++
+                    samplingRateValue++
+                } else if (second == currentSecond) {
+                    signalCount++
+                } else {
+                    currentSecond = second
+                    samplingRateValue = signalCount
+                    signalCount = 0
+                    // Update the sampling rate in configuration for Butterworth filter
+                    configuration.samplingRate = samplingRateValue
+                }
+
+                val filtered = filters.butterworthFilter(accelerometer.rawValues)
+                accelerometer.filteredValues = filtered
+                accelerometer.filteredResultant = calculations.resultant(filtered)
+
+                if (keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)) {
+                    stepDetected = stepDetection.detectStepByPeakDifference()
+                } else {
+                    stepDetected = false
+                }
+            }
+        }
+
+        private fun updateButterworthParameters(currentTime: Long) {
+            // Update lastDiffMagnitude with the current local extrema difference
+            configuration.lastDiffMagnitude = configuration.localExtremaDifference
+            
+            // Update lastStepTimeDiff with time difference between consecutive steps
+            if (configuration.lastDetectedStepTime > 0) {
+                val timeDiff = currentTime - configuration.lastDetectedStepTime
+                configuration.lastStepTimeDiff = BigDecimal.valueOf(timeDiff.toDouble())
             }
         }
 
