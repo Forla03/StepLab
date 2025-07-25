@@ -90,10 +90,6 @@ class EnterSettingsFragment(
             firstView?.visibility = View.GONE
         }
 
-        // Hide Butterworth filter for live testing (real-time mode)
-        if (isLiveTesting) {
-            filterButterworth?.visibility = View.GONE
-        }
 
         setupListeners()
         applyDefaultSelection()
@@ -199,21 +195,10 @@ class EnterSettingsFragment(
 
         filterButterworth?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                if (isLiveTesting) {
-                    // Prevent selection of Butterworth filter in live testing
-                    filterButterworth?.isChecked = false
-                    // Default to Low-Pass filter instead
-                    filterLowPass?.isChecked = true
-                    configuration.filterType = 1
-                    configuration.detectionThreshold = BigDecimal.valueOf(5)
-                    showCutoffFrequency()
-                    uncheckAllFiltersExcept(filterLowPass)
-                } else {
-                    configuration.filterType = 4
-                    configuration.detectionThreshold = BigDecimal.valueOf(5)
-                    hideCutoffFrequency()
-                    uncheckAllFiltersExcept(filterButterworth)
-                }
+                configuration.filterType = 4
+                configuration.detectionThreshold = BigDecimal.valueOf(5)
+                hideCutoffFrequency()
+                uncheckAllFiltersExcept(filterButterworth)
             }
         }
 

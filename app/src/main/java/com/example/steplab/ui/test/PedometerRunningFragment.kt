@@ -47,6 +47,13 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     private var cutoffFrequencyValue: Int = 0
     private var alpha: BigDecimal = BigDecimal("0.1")
 
+    // Variables for Butterworth filter dynamic sampling rate calculation
+    private var butterworthSamplingRateValue: Int = 0
+    private var butterworthSignalCount: Int = 0
+    private var butterworthFirstSecond: Int? = null
+    private var butterworthCurrentSecond: Int? = null
+    private var butterworthFirstSignal: Boolean = true
+
     private var currentSecond: Int = 0
     private var firstSecond: Int = 0
     private var sensorEventCount: Int = 0
@@ -151,6 +158,16 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         }
         sensorEventCount = samplingRate
 
+        // Initialize Butterworth filter variables
+        butterworthSamplingRateValue = 0
+        butterworthSignalCount = 0
+        butterworthFirstSecond = null
+        butterworthCurrentSecond = null
+        butterworthFirstSignal = true
+        
+        // Set initial sampling rate in configuration for Butterworth filter
+        configuration.samplingRate = samplingRate
+
         selectedCutoffIndex = configuration.cutoffFrequencyIndex
         if (selectedCutoffIndex == 3) {
             alpha = BigDecimal("0.1")
@@ -245,10 +262,7 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         }
 
         if (configuration.realTimeMode == 0 && isAccelerometerEvent) {
-            // In live testing, prevent using Butterworth filter - default to no filter
-            val actualFilterType = if (configuration.filterType == 4) 2 else configuration.filterType
-            
-            when (actualFilterType) {
+            when (configuration.filterType) {
                 0 -> { // Bagilevi Filter
                     val filtered = filters.bagileviFilter(accelerometerData.rawValues)
                     accelerometerData.filteredResultant = filtered
@@ -337,6 +351,49 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
                         }
                     }
                 }
+                
+                4 -> { // Butterworth Filter
+                    // Update sampling frequency dynamically (similar to low-pass filter in ConfigurationsComparison)
+                    calendar.timeInMillis = timestamp
+                    val second = calendar.get(Calendar.SECOND)
+
+                    if (butterworthFirstSignal) {
+                        butterworthFirstSecond = second
+                        butterworthCurrentSecond = second
+                        butterworthFirstSignal = false
+                    }
+
+                    if (second == butterworthFirstSecond) {
+                        butterworthSignalCount++
+                        butterworthSamplingRateValue++
+                    } else if (second == butterworthCurrentSecond) {
+                        butterworthSignalCount++
+                    } else {
+                        butterworthCurrentSecond = second
+                        butterworthSamplingRateValue = butterworthSignalCount
+                        butterworthSignalCount = 0
+                        // Update the sampling rate in configuration for Butterworth filter
+                        configuration.samplingRate = butterworthSamplingRateValue
+                    }
+
+                    val filtered = filters.butterworthFilter(accelerometerData.rawValues)
+                    accelerometerData.filteredValues = filtered
+                    val magnitude = calculations.resultant(filtered)
+                    accelerometerData.filteredResultant = magnitude
+
+                    if (keyValueRecognition.recognizeLocalExtremaRealtime(magnitude, timestamp)) {
+                        stepDetected = stepDetection.detectStepByPeakDifference()
+                    }
+
+                    chartLine.label = "Acceleration - Butterworth Filter"
+                    chartData = lineChart.data
+                    chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
+                    chartData.notifyDataChanged()
+                    lineChart.notifyDataSetChanged()
+                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    lineChart.moveViewToX(chartData.entryCount.toFloat())
+                    counter++
+                }
             }
 
             if (configuration.recognitionAlgorithm == 1) {
@@ -354,6 +411,10 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         }
 
         if (stepDetected) {
+            // Update parameters for Butterworth dynamic cutoff when step is detected
+            if (configuration.filterType == 4) {
+                updateButterworthParameters(timestamp)
+            }
             onStepDetected()
         }
 
@@ -376,5 +437,17 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
             MathContext.DECIMAL32
         )
         return sampling.divide(sampling.add(cutoff), MathContext.DECIMAL32)
+    }
+
+    private fun updateButterworthParameters(currentTime: Long) {
+        // Update lastDiffMagnitude with the current local extrema difference
+        configuration.lastDiffMagnitude = configuration.localExtremaDifference
+        
+        // Update lastStepTimeDiff with time difference between consecutive steps
+        if (configuration.lastDetectedStepTime > 0) {
+            val timeDiff = currentTime - configuration.lastDetectedStepTime
+            configuration.lastStepTimeDiff = BigDecimal.valueOf(timeDiff.toDouble())
+        }
+        configuration.lastDetectedStepTime = currentTime
     }
 }
