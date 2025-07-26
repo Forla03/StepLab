@@ -2,6 +2,8 @@ package com.example.steplab.algorithms
 
 import java.math.BigDecimal
 import java.math.MathContext
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * Implements real-time step detection using various strategies.
@@ -89,4 +91,88 @@ class StepDetection(
         }
         return stepDetected
     }
+
+    fun movingStd(signal: List<Double>, windowSize: Int = 2): List<Double> {
+        val result = mutableListOf<Double>()
+        for (i in 0..signal.size - windowSize) {
+            val window = signal.subList(i, i + windowSize)
+            val mean = window.average()
+            val std = sqrt(window.sumOf { (it - mean) * (it - mean) } / window.size)
+            result.add(std)
+        }
+        return result
+    }
+
+    fun dynamicStdThreshold(movingStd: List<Double>): Double {
+        val mean = movingStd.average()
+        return sqrt(movingStd.sumOf { (it - mean) * (it - mean) } / movingStd.size)
+    }
+
+    fun extractMovementSegments(
+        signal: List<Double>,
+        movingStd: List<Double>,
+        threshold: Double,
+        windowSize: Int = 2
+    ): List<List<Double>> {
+        val segments = mutableListOf<MutableList<Double>>()
+        var currentSegment: MutableList<Double>? = null
+
+        for (i in movingStd.indices) {
+            if (movingStd[i] > threshold) {
+                if (currentSegment == null) currentSegment = mutableListOf()
+                currentSegment.add(signal[i])
+            } else if (currentSegment != null) {
+                segments.add(currentSegment)
+                currentSegment = null
+            }
+        }
+
+        if (currentSegment != null && currentSegment.isNotEmpty()) {
+            segments.add(currentSegment)
+        }
+
+        return segments
+    }
+
+    fun autocorrelation(signal: List<Double>): List<Double> {
+        val n = signal.size
+        val mean = signal.average()
+        val variance = signal.sumOf { (it - mean).pow(2) } / n
+
+        return List(n) { lag ->
+            var sum = 0.0
+            for (i in 0 until n - lag) {
+                sum += (signal[i] - mean) * (signal[i + lag] - mean)
+            }
+            sum / ((n - lag) * variance)
+        }
+    }
+
+    fun findFirstPeak(acf: List<Double>, threshold: Double = 0.7): Pair<Int, Double>? {
+        for (i in 1 until acf.size - 1) {
+            if (acf[i] > acf[i - 1] && acf[i] > acf[i + 1] && acf[i] >= threshold) {
+                return i to acf[i]
+            }
+        }
+        return null
+    }
+
+    fun detectStepsUsingACF(segments: List<List<Double>>, samplingRate: Int): Int {
+        var totalSteps = 0
+
+        for (segment in segments) {
+            if (segment.size < 30) continue // too short
+
+            val acf = autocorrelation(segment)
+            val peak = findFirstPeak(acf, threshold = 0.6)
+
+            if (peak != null) {
+                val lag = peak.first
+                totalSteps += segment.size / lag
+            }
+        }
+
+        return totalSteps
+    }
+
 }

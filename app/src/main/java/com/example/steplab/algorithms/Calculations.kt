@@ -1,8 +1,10 @@
 package com.example.steplab.algorithms
 
 import android.hardware.SensorManager
+import org.jtransforms.fft.DoubleFFT_1D
 import java.math.BigDecimal
 import java.math.MathContext
+import kotlin.math.sqrt
 
 class Calculations(
     private val configuration: Configuration = Configuration()
@@ -17,6 +19,15 @@ class Calculations(
         val z = vector[2].toDouble()
         // sqrt((sqrt(x^2 + y^2))^2 + z^2) simplifies to sqrt(x^2 + y^2 + z^2)
         return BigDecimal.valueOf(Math.sqrt(x * x + y * y + z * z))
+    }
+
+    /**
+     * Remove DC component from a list of vectors.
+     */
+    fun resultantWithoutDC(vectors: List<Array<BigDecimal>>): List<Double> {
+        val magnitudes = vectors.map { resultant(it).toDouble() }
+        val mean = magnitudes.average()
+        return magnitudes.map { it - mean }
     }
 
     /**
@@ -82,4 +93,29 @@ class Calculations(
         }
         return worldResult
     }
+
+    /**
+     * Fast Fourier transfor (FFT) for correlation matrix algorithm.
+     */
+    fun fastFourierTransform(input: Array<BigDecimal>): Array<BigDecimal> {
+        val n = input.size
+
+        val fftData = DoubleArray(n * 2)
+        for (i in input.indices) {
+            fftData[2 * i] = input[i].toDouble()
+            fftData[2 * i + 1] = 0.0
+        }
+
+        val fft = DoubleFFT_1D(n.toLong())
+        fft.complexForward(fftData)
+
+        val magnitude = Array(n / 2) { i ->
+            val re = fftData[2 * i]
+            val im = fftData[2 * i + 1]
+            BigDecimal.valueOf(sqrt(re * re + im * im))
+        }
+
+        return magnitude
+    }
+
 }

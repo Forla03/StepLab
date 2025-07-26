@@ -1,6 +1,8 @@
 package com.example.steplab.algorithms
 
 import java.math.BigDecimal
+import kotlin.math.ceil
+import kotlin.math.floor
 
 class KeyValueRecognition(private val configuration: Configuration) {
 
@@ -102,5 +104,29 @@ class KeyValueRecognition(private val configuration: Configuration) {
                 configuration.lastXAxisIntersectionTime = timestamp ?: 0
             }
         }
+    }
+
+    /**
+     * Detect fundamental frequency for autocorrelation matrix.
+     */
+    fun findFundamentalFrequency(
+        magnitude: Array<BigDecimal>,
+        samplingRate: Int): Double {
+
+        val n = magnitude.size*2
+        val startIndex = ceil(1.0 * n / samplingRate).toInt()
+        val endIndex = floor(3.0 * n / samplingRate).toInt()
+
+        var maxIndex = startIndex
+        var maxValue = magnitude[startIndex]
+
+        for(i in startIndex..endIndex){
+            if (magnitude[i] > maxValue) {
+                maxIndex = i
+                maxValue = magnitude[i]
+            }
+        }
+
+        return maxIndex.toDouble() * samplingRate / n
     }
 }
