@@ -101,4 +101,25 @@ class Filters(
 
         return cutoff
     }
+
+    /**
+     * Applies a Butterworth band-pass filter centered around the fundamental frequency.
+     * This filter is designed **only for** the ACF algorithm (non real-time).
+     */
+    fun butterworthBandPassForACF(
+        signal: List<Double>,
+        samplingRate: Int,
+        fundamentalFreq: Double
+    ): List<Double> {
+        val lowCutoff = 1.0
+        val highCutoff = fundamentalFreq + 0.5
+
+        val centerFreq = (lowCutoff + highCutoff) / 2.0
+        val bandwidth = (highCutoff - lowCutoff)
+
+        val filter = Butterworth()
+        filter.bandPass(6, samplingRate.toDouble(), centerFreq, bandwidth / 2.0)
+
+        return signal.map { filter.filter(it) }
+    }
 }

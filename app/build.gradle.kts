@@ -45,7 +45,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation ("uk.me.berndporr:iirj:1.7")
-
+    implementation ("com.github.wendykierp:JTransforms:3.1")
 
     // Room
     implementation("androidx.room:room-runtime:2.7.2")
