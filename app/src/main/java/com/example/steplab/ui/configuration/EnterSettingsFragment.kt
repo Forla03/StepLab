@@ -35,6 +35,10 @@ class EnterSettingsFragment(
     private var filterLowPass: RadioButton? = null
     private var noFilter: RadioButton? = null
     private var filterRotation: RadioButton? = null
+    private var butterworthFilter: RadioButton? = null
+    private var falseStepRadio: RadioButton? = null
+    private var timeFiltering: RadioButton? = null
+    private var autocorrelation: RadioButton? = null
 
     private var cutoffTwo: RadioButton? = null
     private var cutoffThree: RadioButton? = null
@@ -70,6 +74,10 @@ class EnterSettingsFragment(
         filterLowPass = root.findViewById(R.id.filter_low_pass)
         noFilter = root.findViewById(R.id.no_filter)
         filterRotation = root.findViewById(R.id.filter_rotation)
+        butterworthFilter = root.findViewById(R.id.butterworth_filter)
+        falseStepRadio = root.findViewById(R.id.false_step_radio)
+        timeFiltering = root.findViewById(R.id.time_filtering_alg)
+        autocorrelation = root.findViewById(R.id.autocorrelation)
 
         cutoffTwo = root.findViewById(R.id.cutoff_two)
         cutoffThree = root.findViewById(R.id.cutoff_three)
@@ -153,6 +161,14 @@ class EnterSettingsFragment(
             }
         }
 
+        timeFiltering?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                configuration.recognitionAlgorithm = 2
+                recognitionPeak?.isChecked = false
+                recognitionIntersection?.isChecked = false
+            }
+        }
+
         filterBagilevi?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
                 configuration.filterType = 0
@@ -189,6 +205,36 @@ class EnterSettingsFragment(
             }
         }
 
+        butterworthFilter?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                configuration.filterType = 4
+                hideCutoffFrequency()
+                uncheckAllFiltersExcept(butterworthFilter)
+                recognitionPeak?.isChecked = false
+            }
+        }
+
+        falseStepRadio?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                configuration.filterType = 4
+                autocorrelation?.isChecked = false
+                hideCutoffFrequency()
+                uncheckAllFiltersExcept(falseStepRadio)
+                recognitionPeak?.isChecked = false
+            }
+        }
+
+        autocorrelation?.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                configuration.autocorcAlg = true
+                falseStepRadio?.isChecked = false
+                hideCutoffFrequency()
+                layoutSamplingRate?.visibility = View.GONE
+                uncheckAllFiltersExcept(autocorrelation)
+                recognitionPeak?.isChecked = false
+            }
+        }
+
         cutoffTwo?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) setCutoff(0)
         }
@@ -210,9 +256,10 @@ class EnterSettingsFragment(
     }
 
     private fun uncheckAllFiltersExcept(checked: RadioButton?) {
-        listOf(filterBagilevi, filterLowPass, noFilter, filterRotation)
-            .filter { it != checked }
-            .forEach { it?.isChecked = false }
+        listOf(
+            filterBagilevi, filterLowPass, noFilter, filterRotation,
+            butterworthFilter, falseStepRadio, autocorrelation
+        ).filter { it != checked }.forEach { it?.isChecked = false }
     }
 
     private fun showCutoffFrequency() {
@@ -247,7 +294,8 @@ class EnterSettingsFragment(
             recognitionPeak, recognitionIntersection,
             filterBagilevi, filterLowPass, noFilter, filterRotation,
             cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty,
-            cutoffFrequencyLayout, layoutSamplingRate, textSamplingRate, firstView
+            cutoffFrequencyLayout, layoutSamplingRate, textSamplingRate, firstView,
+            butterworthFilter, falseStepRadio, timeFiltering, autocorrelation
         ).forEach { it?.isEnabled = false }
     }
 }

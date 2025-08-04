@@ -40,6 +40,7 @@ class NewTest : AppCompatActivity(), SensorEventListener {
     private var accelerometer: Sensor? = null
     private var magnetometer: Sensor? = null
     private var gravitySensor: Sensor? = null
+    private var rotationSensor: Sensor? = null
     private var timestamp: Long = 0
     private var counter = 0
     private val calculations = Calculations()
@@ -58,6 +59,7 @@ class NewTest : AppCompatActivity(), SensorEventListener {
             color = Color.RED
             setDrawCircles(false)
             setDrawValues(false)
+            setDrawIcons(true)
         }
 
         chartData = LineData().apply { addDataSet(chartLine) }
@@ -79,11 +81,10 @@ class NewTest : AppCompatActivity(), SensorEventListener {
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         gravitySensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
-
-        listOf(accelerometer, magnetometer, gravitySensor).forEach { sensor ->
-            sensor?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
+        rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
+        listOf(accelerometer, magnetometer, gravitySensor, rotationSensor).forEach {
+            it?.let { sensor -> sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST) }
         }
-
         startStopButton.setOnClickListener { stopRecording() }
     }
 
@@ -196,6 +197,15 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                     put("gravity_z", values[2].toPlainString())
                 }
 
+                testData[timestamp.toString()] = json
+            }
+
+            Sensor.TYPE_ROTATION_VECTOR -> {
+                val json = JSONObject().apply {
+                    put("rotation_x", values[0].toPlainString())
+                    put("rotation_y", values[1].toPlainString())
+                    put("rotation_z", values[2].toPlainString())
+                }
                 testData[timestamp.toString()] = json
             }
         }
