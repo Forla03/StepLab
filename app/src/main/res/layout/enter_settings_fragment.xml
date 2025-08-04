@@ -141,7 +141,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="40dp"
-                android:enabled="false"
+                android:enabled="true"
                 android:paddingLeft="10dp"
                 android:paddingRight="10dp"
                 android:text="@string/not_real_time">
@@ -186,6 +186,23 @@
                 android:paddingRight="10dp"
                 android:text="@string/intersection">
             </RadioButton>
+            <RadioButton
+                android:id="@+id/time_filtering_alg"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/timeFiltering">
+            </RadioButton>
+            <RadioButton
+                android:id="@+id/butterworth_filter"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="0.45"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/butterworth_filter"/>
         </LinearLayout>
         <View
             android:layout_width="match_parent"
@@ -333,6 +350,49 @@
                     </RadioButton>
                 </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0.1dp"
+            android:layout_marginTop="10dp"
+            android:background="@color/design_default_color_primary">
+        </View>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingLeft="20dp"
+            android:paddingTop="10dp"
+            android:paddingBottom="10dp"
+            android:text="@string/not_real_time"
+            android:textColor="@color/black"
+            android:textSize="18dp"
+            android:textAlignment="center">
+        </TextView>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <RadioButton
+                android:id="@+id/false_step_radio"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/falseMagn">
+            </RadioButton>
+
+            <RadioButton
+                android:id="@+id/autocorrelation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/autocorrelation">
+            </RadioButton>
         </LinearLayout>
 
 </LinearLayout>

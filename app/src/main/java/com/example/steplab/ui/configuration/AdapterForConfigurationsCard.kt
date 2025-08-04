@@ -63,7 +63,9 @@ class AdapterForConfigurationsCard(
         // Step detection algorithm
         holder.algorithm.text = context.getString(R.string.step_recognition_algorithm_italic) + when (config.recognitionAlgorithm) {
             0 -> context.getString(R.string.peak)
-            else -> context.getString(R.string.intersection)
+            1 -> context.getString(R.string.intersection)
+            2 -> context.getString(R.string.timeFiltering)
+            else -> ""
         }
 
         // Filter
@@ -89,6 +91,10 @@ class AdapterForConfigurationsCard(
             }
             3 -> {
                 holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.rotation_filter)
+                holder.frequency.visibility = View.GONE
+            }
+            4 -> {
+                holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.butterworth_filter)
                 holder.frequency.visibility = View.GONE
             }
         }
