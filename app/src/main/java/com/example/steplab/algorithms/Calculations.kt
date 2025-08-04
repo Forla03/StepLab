@@ -82,4 +82,44 @@ class Calculations(
         }
         return worldResult
     }
+
+    /**
+     * Checks if the current step is a false step.
+     */
+    fun checkFalseStep(
+        last4Steps: MutableList<Float>,
+        currentStepMean: Float
+    ): Boolean {
+        var mK = 0f
+        for (value in last4Steps) {
+            mK += value
+        }
+
+        val extendedSteps = ArrayList(last4Steps)
+        extendedSteps.add(currentStepMean)
+
+        var mK2 = 0f
+        for (value in extendedSteps) {
+            mK2 += value
+        }
+
+        val mCalc = mK / 4
+        val m2Calc = mK2 / 5
+
+        val threshMagn = kotlin.math.sqrt((mCalc - m2Calc) * (mCalc - m2Calc))
+
+        return threshMagn > 1.2
+    }
+
+    /**
+     * Calculates the sum of the values in a list.
+     */
+    fun sumOfMagnet(magnetValues: List<Float>): Float {
+        var sum = 0f
+        for (value in magnetValues) {
+            sum += value
+        }
+        return sum
+    }
+
 }

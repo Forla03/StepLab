@@ -37,7 +37,21 @@ data class Configuration(
     /** Threshold for continuous Bagilevi detection */
     var continuousBagileviDetection: Boolean = false,
     /** Threshold value for step detection */
-    var detectionThreshold: BigDecimal = BigDecimal.ZERO
+    var detectionThreshold: BigDecimal = BigDecimal.ZERO,
+    /** Time-filtering: previous peak (ExMax) */
+    var exMax: Long? = 0L,
+    /** Time-filtering: two peaks ago (ExExMax) */
+    var exExMax: Long? = 0L,
+    /** Time-filtering: previous valley (ExMin) */
+    var exMin: Long? = 0L,
+    /** Time-filtering: two valleys ago (ExExMin) */
+    var exExMin: Long? = 0L,
+    /** Magnitude of previous local maximum (used for peak tuning) */
+    var previousLocalMax: BigDecimal = BigDecimal.ZERO,
+    /** Magnitude of previous local minimum (used for valley tuning) */
+    var previousLocalMin: BigDecimal = BigDecimal.ZERO,
+    /** Whether to enable autocorrelation algorithm (if used) */
+    var autocorcAlg: Boolean = false
 ) : Serializable, Cloneable {
 
     /**
