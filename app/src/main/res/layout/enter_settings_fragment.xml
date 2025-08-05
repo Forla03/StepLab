@@ -195,14 +195,6 @@
                 android:paddingRight="10dp"
                 android:text="@string/timeFiltering">
             </RadioButton>
-            <RadioButton
-                android:id="@+id/butterworth_filter"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="0.45"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:text="@string/butterworth_filter"/>
         </LinearLayout>
         <View
             android:layout_width="match_parent"
@@ -258,7 +250,7 @@
                     android:id="@+id/filter_rotation"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="0.45"
+                    android:layout_weight="0.33"
                     android:paddingLeft="10dp"
                     android:paddingRight="10dp"
                     android:text="@string/rotation_filter">
@@ -267,10 +259,19 @@
                     android:id="@+id/filter_bagilevi"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="0.55"
+                    android:layout_weight="0.33"
                     android:paddingLeft="10dp"
                     android:paddingRight="10dp"
                     android:text="@string/bagilevi_filter">
+                </RadioButton>
+                <RadioButton
+                    android:id="@+id/butterworth_filter"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.34"
+                    android:paddingLeft="10dp"
+                    android:paddingRight="10dp"
+                    android:text="@string/butterworth_filter">
                 </RadioButton>
             </LinearLayout>
         </LinearLayout>
