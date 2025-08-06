@@ -16,6 +16,11 @@ class EnterSettingsFragment(
     private val showSamplingRate: Boolean = true
 ) : Fragment() {
 
+    // Alternative constructors for Java compatibility
+    constructor() : this(Configuration(), true)
+    
+    constructor(configuration: Configuration) : this(configuration, true)
+
     private var first = true
 
     private var scrollView: ScrollView? = null
@@ -93,6 +98,10 @@ class EnterSettingsFragment(
             textSamplingRate?.visibility = View.GONE
             layoutSamplingRate?.visibility = View.GONE
             firstView?.visibility = View.GONE
+        } else {
+            textSamplingRate?.visibility = View.VISIBLE
+            layoutSamplingRate?.visibility = View.VISIBLE
+            firstView?.visibility = View.VISIBLE
         }
 
         setupListeners()
@@ -137,6 +146,10 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.realTimeMode = 0
                 modalityNotRealTime?.isChecked = false
+                falseStepRadio?.isEnabled = false
+                falseStepRadio?.isChecked = false
+                autocorrelation?.isEnabled = false
+                autocorrelation?.isChecked = false
             }
         }
 
@@ -144,6 +157,9 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.realTimeMode = 1
                 modalityRealTime?.isChecked = false
+                falseStepRadio?.isEnabled = true
+                falseStepRadio?.isChecked = true
+                autocorrelation?.isEnabled = true
             }
         }
 
@@ -151,6 +167,7 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.recognitionAlgorithm = 0
                 recognitionIntersection?.isChecked = false
+                timeFiltering?.isChecked = false
             }
         }
 
@@ -158,6 +175,7 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.recognitionAlgorithm = 1
                 recognitionPeak?.isChecked = false
+                timeFiltering?.isChecked = false
             }
         }
 

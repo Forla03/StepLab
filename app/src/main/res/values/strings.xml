@@ -25,6 +25,7 @@
     <string name="autocorrelation">Autocorrelation</string>
     <string name="cutoff_frequency">Cutoff Frequency</string>
     <string name="cutoff_frequency_italic"><i>Cutoff Frequency: </i></string>
+    <string name="dynamic_frequency">Dynamic (Adaptive)</string>
     <string name="divided_fifty">2% Sampling Rate</string>
     <string name="number_of_steps">Steps:</string>
     <string name="exit">Are you sure you want to exit?</string>

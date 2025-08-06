@@ -15,6 +15,7 @@ class KeyValueRecognition(private val configuration: Configuration) {
     private var previousValue: BigDecimal = BigDecimal.ZERO
     private var peakValue: BigDecimal = BigDecimal.ZERO
     private var previousTimestamp: Long = 0
+    private var peakDetectedValue: BigDecimal = BigDecimal.ZERO
 
     private var firstValue = true
     private var wasPreviouslyPositive: Boolean? = null
@@ -105,23 +106,27 @@ class KeyValueRecognition(private val configuration: Configuration) {
     }
 
     /**
-     * Recognize peaks and valleys using time filtering method (non-real-time logic).
+     * Time filtering step recognition: identifies significant peaks and valleys using temporal thresholds.
      */
     fun recognizeLocalExtremaTimeFiltering(
         magnitude: BigDecimal,
         timestamp: Long
     ): Boolean {
+
         if (magnitude <= previousValue) {
             valleyDetected = false
-            if (!peakDetected || previousValue > peakValue) {
+
+            if (!peakDetected || previousValue > peakDetectedValue) {
                 configuration.exExMax?.let { exEx ->
+                    val exMax = configuration.exMax ?: 0L
                     val thS = 0.5 * (configuration.exMax?.toDouble() ?: 0.0 - exEx.toDouble())
-                    if ((configuration.lastStepFirstPhaseTime - (configuration.exMax ?: 0)) > thS) {
-                        val thE = 0.3 * (configuration.lastStepFirstPhaseTime - (configuration.exMax ?: 0))
-                        if ((previousTimestamp - configuration.lastStepFirstPhaseTime) < thE) {
-                            // NO OP
-                        } else {
-                            // Update the peak
+                    val delta = configuration.lastStepFirstPhaseTime - exMax
+
+                    if (delta > thS) {
+                        val thE = 0.3 * delta
+                        val deltaPeak = previousTimestamp - configuration.lastStepFirstPhaseTime
+
+                        if (deltaPeak >= thE) {
                             configuration.previousLocalMax = configuration.lastLocalMaxAccel
                             configuration.exExMax = configuration.exMax
                             configuration.exMax = configuration.lastStepFirstPhaseTime
@@ -136,25 +141,29 @@ class KeyValueRecognition(private val configuration: Configuration) {
                     }
                 }
 
-                peakValue = previousValue
+                peakDetectedValue = previousValue
                 configuration.exExMax = configuration.exMax
                 configuration.exMax = configuration.lastStepFirstPhaseTime
                 configuration.lastLocalMaxAccel = previousValue
                 configuration.lastStepFirstPhaseTime = previousTimestamp
                 peakDetected = true
             }
+
         } else if (peakDetected && magnitude >= previousValue) {
+
             if (!valleyDetected) {
-                peakValue = BigDecimal.ZERO
+                peakDetectedValue = BigDecimal.ZERO
 
                 configuration.exExMin?.let { exEx ->
+                    val exMin = configuration.exMin ?: 0L
                     val thS = 0.5 * (configuration.exMin?.toDouble() ?: 0.0 - exEx.toDouble())
-                    if ((configuration.lastStepSecondPhaseTime - (configuration.exMin ?: 0)) > thS) {
-                        val thE = 0.3 * (configuration.lastStepSecondPhaseTime - (configuration.exMin ?: 0))
-                        if ((previousTimestamp - configuration.lastStepSecondPhaseTime) < thE) {
-                            // NO OP
-                        } else {
-                            // Update the valley
+                    val delta = configuration.lastStepSecondPhaseTime - exMin
+
+                    if (delta > thS) {
+                        val thE = 0.3 * delta
+                        val deltaValley = previousTimestamp - configuration.lastStepSecondPhaseTime
+
+                        if (deltaValley >= thE) {
                             configuration.previousLocalMin = configuration.lastLocalMinAccel
                             configuration.exExMin = configuration.exMin
                             configuration.exMin = configuration.lastStepSecondPhaseTime

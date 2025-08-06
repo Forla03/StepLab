@@ -9,14 +9,18 @@ class Calculations(
 ) {
 
     /**
-     * Computes the resultant magnitude of a 3-component vector.
+     * Computes the resultant magnitude of a 3-component vector using the original Java formula.
      */
     fun resultant(vector: Array<BigDecimal>): BigDecimal {
         val x = vector[0].toDouble()
         val y = vector[1].toDouble()
         val z = vector[2].toDouble()
-        // sqrt((sqrt(x^2 + y^2))^2 + z^2) simplifies to sqrt(x^2 + y^2 + z^2)
-        return BigDecimal.valueOf(Math.sqrt(x * x + y * y + z * z))
+        
+        // Use the exact formula from Java: sqrt((sqrt(x^2 + y^2))^2 + z^2)
+        val xyMagnitude = Math.sqrt(Math.pow(x, 2.0) + Math.pow(y, 2.0))
+        val result = Math.sqrt(Math.pow(xyMagnitude, 2.0) + Math.pow(z, 2.0))
+        
+        return BigDecimal.valueOf(result)
     }
 
     /**
@@ -40,12 +44,12 @@ class Calculations(
 
     /**
      * Calculates and stores the 3x3 rotation matrix based on accelerometer and magnetometer readings.
+     * Uses the exact same indices as the Java version.
      */
     fun updateRotationMatrix(
         accel: Array<BigDecimal>,
         magnet: Array<BigDecimal>
     ) {
-
         // copy sensor values to float arrays
         for (i in accel.indices) {
             gravity[i] = accel[i].toFloat()
@@ -54,12 +58,23 @@ class Calculations(
 
         val success = SensorManager.getRotationMatrix(rotationMatrix, null, gravity, geomagnetic)
         if (success) {
-            // store only the 3x3 part
-            val matrix3x3 = Array(3) { row ->
-                Array(3) { col ->
-                    BigDecimal.valueOf(rotationMatrix[row * 4 + col].toDouble())
-                }
-            }
+            val matrix3x3 = arrayOf(
+                arrayOf(
+                    BigDecimal.valueOf(rotationMatrix[0].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[1].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[2].toDouble())
+                ),
+                arrayOf(
+                    BigDecimal.valueOf(rotationMatrix[4].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[5].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[6].toDouble())
+                ),
+                arrayOf(
+                    BigDecimal.valueOf(rotationMatrix[8].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[9].toDouble()),
+                    BigDecimal.valueOf(rotationMatrix[10].toDouble())
+                )
+            )
             configuration.rotationMatrix = matrix3x3
             rotationMatrixCached = true
         }
