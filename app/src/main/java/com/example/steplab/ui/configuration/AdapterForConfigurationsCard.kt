@@ -95,7 +95,8 @@ class AdapterForConfigurationsCard(
             }
             4 -> {
                 holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.butterworth_filter)
-                holder.frequency.visibility = View.GONE
+                holder.frequency.visibility = View.VISIBLE
+                holder.frequency.text = context.getString(R.string.cutoff_frequency_italic) + context.getString(R.string.dynamic_frequency)
             }
         }
 

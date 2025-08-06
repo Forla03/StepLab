@@ -18,6 +18,7 @@ import com.example.steplab.algorithms.*
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
+import java.util.Calendar
 import com.github.mikephil.charting.data.LineDataSet
 import java.math.BigDecimal
 import java.math.MathContext
@@ -53,6 +54,12 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     private var stepCount: Int = 0
     private var counter: Int = 0
     private var timestamp: Long = 0
+    
+    // For Butterworth filter support
+    private var firstSignal: Boolean = true
+    private var signalCount: Int = 0
+    private var currentSecond_var: Int = 0
+    private var cutoffSelected: Double = 0.0
     
     // Reuse Calendar instance to avoid frequent object creation
     private val calendar = Calendar.getInstance()
@@ -333,6 +340,51 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
                             counter++
                         }
                     }
+                }
+
+                4 -> { // Butterworth Filter
+                    // Update sampling rate dynamically
+                    val currentSecond = Calendar.getInstance().get(Calendar.SECOND)
+                    if (firstSignal) {
+                        firstSecond = currentSecond
+                        currentSecond_var = currentSecond
+                        firstSignal = false
+                    }
+
+                    if (currentSecond == firstSecond) {
+                        signalCount++
+                        samplingRate++
+                    } else if (currentSecond == currentSecond_var) {
+                        signalCount++
+                    } else {
+                        currentSecond_var = currentSecond
+                        samplingRate = signalCount
+                        signalCount = 0
+                    }
+
+                    val filtered = filters.butterworthFilter(accelerometerData.rawValues, cutoffSelected, samplingRate)
+                    accelerometerData.filteredValues = filtered
+                    val magnitude = calculations.resultant(filtered)
+                    accelerometerData.filteredResultant = magnitude
+
+                    val detectionResult = when (configuration.recognitionAlgorithm) {
+                        2 -> keyValueRecognition.recognizeLocalExtremaTimeFiltering(magnitude, timestamp)
+                        1 -> keyValueRecognition.recognizeLocalExtremaRealtime(magnitude, timestamp)
+                        else -> false
+                    }
+
+                    if (detectionResult) {
+                        stepDetected = stepDetection.detectStepByPeakDifference()
+                    }
+
+                    chartLine.label = "Acceleration - Butterworth Filter"
+                    chartData = lineChart.data
+                    chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
+                    chartData.notifyDataChanged()
+                    lineChart.notifyDataSetChanged()
+                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+                    lineChart.moveViewToX(chartData.entryCount.toFloat())
+                    counter++
                 }
             }
 

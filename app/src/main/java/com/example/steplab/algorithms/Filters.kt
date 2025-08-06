@@ -14,10 +14,11 @@ class Filters(
     // Stores last filtered accelerometer components
     private val filteredComponents = Array(3) { BigDecimal.ZERO }
 
-    // Butterworth filters for each axis
+    // Butterworth filters for each axis - maintain state across calls
     private val butterworthFilters = Array(3) { Butterworth() }
-
-    private var initialized = false
+    private var butterworthInitialized = false
+    private var lastCutoff: Double = -1.0
+    private var lastSamplingRate: Int = -1
 
     /**
      * Low-pass filter: filtered[i] = filtered[i] + alpha * (input[i] - filtered[i])
@@ -58,35 +59,68 @@ class Filters(
 
     /**
      * Butterworth filter applied independently on each component.
-     * @param input The input accelerometer vector.
-     * @param cutoffFrequency The cutoff frequency.
-     * @param samplingRate The sampling frequency (Hz).
+     * Maintains filter state across calls for proper IIR filtering.
      */
     fun butterworthFilter(
-        input: Array<BigDecimal>,
-        cutoffFrequency: Double,
-        samplingRate: Int
+        vettore3Componenti: Array<BigDecimal>,
+        taglio: Double,
+        frequenzaCampionamentoValue: Int
     ): Array<BigDecimal> {
-        if (!initialized) {
-            for (i in 0..2) {
-                if (samplingRate > 200) {
-                    val adjustedCutoff = ((samplingRate / 2.0) - 1) - cutoffFrequency
-                    butterworthFilters[i].lowPass(1, samplingRate.toDouble(), adjustedCutoff)
-                } else {
-                    butterworthFilters[i].lowPass(1, 200.0, 50.0)
-                }
-            }
-            initialized = true
-        }
 
         val output = Array(3) { BigDecimal.ZERO }
+
+        // Initialize or reinitialize the filters if the sampling frequency has changed
+        if (!butterworthInitialized || taglio != lastCutoff || frequenzaCampionamentoValue != lastSamplingRate) {
+            initializeButterworthFilters(taglio, frequenzaCampionamentoValue)
+            butterworthInitialized = true
+            lastCutoff = taglio
+            lastSamplingRate = frequenzaCampionamentoValue
+        }
+
         for (i in 0..2) {
-            val value = input[i].toDouble()
-            val filtered = butterworthFilters[i].filter(value)
-            output[i] = BigDecimal.valueOf(filtered)
+            val valoreDouble = vettore3Componenti[i].toDouble()
+            val filteredValue = butterworthFilters[i].filter(valoreDouble)
+            output[i] = BigDecimal.valueOf(filteredValue)
             filteredComponents[i] = output[i]
         }
 
         return output
     }
+
+    /**
+     * Initialize Butterworth filters with proper parameter validation.
+     */
+    private fun initializeButterworthFilters(taglio: Double, frequenzaCampionamentoValue: Int) {
+        // Validate parameters
+        val sampleRate = frequenzaCampionamentoValue.toDouble()
+        val nyquistFrequency = sampleRate / 2.0
+
+        // Ensure cutoff frequency is within valid range (0 < cutoff < Nyquist frequency)
+        val cutoffFrequency = when {
+            taglio <= 0 -> 1.0 // Minimum valid cutoff
+            taglio >= nyquistFrequency -> nyquistFrequency * 0.9 // Maximum 90% of Nyquist
+            else -> taglio
+        }
+
+        // Initialize each filter with the same parameters
+        for (i in 0..2) {
+            butterworthFilters[i].lowPass(
+                1, // Filter order
+                sampleRate,
+                cutoffFrequency
+            )
+        }
+    }
+
+    /**
+     * Reset Butterworth filters state. Call this when starting a new filtering session.
+     */
+    fun resetButterworthFilters() {
+        butterworthInitialized = false
+        // Reset the filter state for all axes
+        for (i in 0..2) {
+            butterworthFilters[i] = Butterworth()
+        }
+    }
+
 }

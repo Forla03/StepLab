@@ -24,7 +24,9 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.MathContext
+import java.text.DecimalFormat
 import java.util.*
+import kotlin.math.pow
 
 class ConfigurationsComparison : AppCompatActivity() {
 
@@ -105,6 +107,7 @@ class ConfigurationsComparison : AppCompatActivity() {
             setDrawCircles(false)
             setDrawValues(false)
             lineWidth = 2f
+            setDrawIcons(true) // Enable icons for false steps
         }
         chartData.addDataSet(baseLine)
         chart.data = chartData
@@ -158,21 +161,26 @@ class ConfigurationsComparison : AppCompatActivity() {
                     val configColor = colors[i % colors.size]
                     val context = ConfigurationContext(clonedConfig, i)
 
-                    // Process all events for this configuration in background
-                    val keys = jsonObject.keys()
-                    var processedEvents = 0
-                    val totalEvents = jsonObject.length()
-                    
-                    while (keys.hasNext()) {
-                        val key = keys.next()
-                        val eventJson = jsonObject.getJSONObject(key)
-                        context.myOnSensorChanged(key.toLong(), eventJson)
+                    // Check if autocorrelation algorithm is enabled
+                    if (clonedConfig.autocorcAlg) {
+                        context.processAutocorrelationAlgorithm()
+                    } else {
+                        // Process all events for this configuration in background
+                        val keys = jsonObject.keys()
+                        var processedEvents = 0
+                        val totalEvents = jsonObject.length()
                         
-                        processedEvents++
-                        
-                        // Yield control every 100 events to prevent ANR
-                        if (processedEvents % 100 == 0) {
-                            kotlinx.coroutines.yield()
+                        while (keys.hasNext()) {
+                            val key = keys.next()
+                            val eventJson = jsonObject.getJSONObject(key)
+                            context.myOnSensorChanged(key.toLong(), eventJson)
+                            
+                            processedEvents++
+                            
+                            // Yield control every 100 events to prevent ANR
+                            if (processedEvents % 100 == 0) {
+                                kotlinx.coroutines.yield()
+                            }
                         }
                     }
 
@@ -206,11 +214,12 @@ class ConfigurationsComparison : AppCompatActivity() {
             // Add LineDataSet for this configuration
             val configDataSet = LineDataSet(processed.chartEntries, "${index + 1}").apply {
                 color = processed.color
-                setDrawValues(false)
+                setDrawValues(true)
                 setCircleColor(processed.color)
                 setDrawCircles(true)
                 circleRadius = 4f
                 lineWidth = 2f
+                setDrawIcons(!isDrawIconsEnabled) // Enable icons for false steps
             }
 
             myLines.add(configDataSet)
@@ -237,6 +246,11 @@ class ConfigurationsComparison : AppCompatActivity() {
         val chartEntries: MutableList<Entry>
     )
 
+    private data class Sample(
+        val magnitude: Double,
+        val timestamp: Double
+    )
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         super.onBackPressed()
@@ -250,6 +264,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         val accelerometer = SensorData()
         val accelerometerXAxis = SensorData()
         val magnetometer = SensorData()
+        val rotation = SensorData()
         val filters = Filters(configuration)
         val calculations = Calculations(configuration)
         val keyPointDetection = KeyValueRecognition(configuration)
@@ -272,9 +287,30 @@ class ConfigurationsComparison : AppCompatActivity() {
         
         // Store chart entries for this configuration
         val chartEntries = mutableListOf<Entry>()
+        
+        // For false step detection
+        private val vectorMagn = FloatArray(3)
+        private var resultMagn = 0f
+        private var resultMagnPrev = 0f
+        private val sumResMagn = mutableListOf<Float>()
+        private var countFour = 0
+        private val resLast4Steps = mutableListOf<Float>()
+        private var falseStep = false
+        
+        // For algorithm 3 (time filtering)
+        private val last3Acc = mutableListOf<BigDecimal>()
+        private var s = 0
+        private var sOld = 0
+        private var cutoffSelected = 3.0 // Default cutoff frequency for Butterworth filter
+        private var oldMagn = 0.0
+        
+        // For autocorrelation algorithm
+        private val recordList = mutableListOf<Sample>()
+        private var startingPoint = 0L
 
         init {
             configuration.lastDetectedStepTime = 0L
+            configuration.lastStepSecondPhaseTime = 0L
             val cutoffFrequencyIndex = configuration.cutoffFrequencyIndex
             if (cutoffFrequencyIndex == 3) {
                 alpha = BigDecimal("0.1")
@@ -289,6 +325,43 @@ class ConfigurationsComparison : AppCompatActivity() {
                 signalCount = 0
                 firstSignal = true
             }
+        }
+
+        fun processAutocorrelationAlgorithm() {
+            val keys = jsonObject.keys()
+            recordList.clear()
+            
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val eventJson = jsonObject.getJSONObject(key)
+                
+                if (eventJson.has("acceleration_x")) {
+                    val x = eventJson.getString("acceleration_x").toDouble()
+                    val y = eventJson.getString("acceleration_y").toDouble()
+                    val z = eventJson.getString("acceleration_z").toDouble()
+                    
+                    val magnitude = Math.sqrt(x * x + y * y + z * z)
+                    
+                    val sample = if (recordList.isEmpty()) {
+                        startingPoint = key.toLong()
+                        Sample(magnitude, key.toDouble())
+                    } else {
+                        val totalDiffInMillis = key.toLong() - startingPoint
+                        val diffSeconds = DecimalFormat("#").format(totalDiffInMillis / 1000)
+                        val diffMillis = totalDiffInMillis % 1000
+                        val mill = diffMillis.toDouble() / 1000
+                        val secMilPassed = diffSeconds.toDouble() + mill
+                        Sample(magnitude, secMilPassed)
+                    }
+                    
+                    recordList.add(sample)
+                }
+            }
+            
+            // Here you would process the autocorrelation algorithm
+            // For now, we'll just count the steps based on the record list size
+            // You should implement the actual autocorrelation logic here
+            stepsCount = recordList.size / 10 // Placeholder logic
         }
 
         fun myOnSensorChanged(instant: Long, eventJson: JSONObject) {
@@ -323,28 +396,60 @@ class ConfigurationsComparison : AppCompatActivity() {
                         BigDecimal(eventJson.getString("gravity_y")),
                         BigDecimal(eventJson.getString("gravity_z"))
                     ))
+                } else if (eventJson.has("rotation_x")) {
+                    accelerometerEvent = false
+                    rotation.rawValues = arrayOf(
+                        BigDecimal(eventJson.getString("rotation_x")),
+                        BigDecimal(eventJson.getString("rotation_y")),
+                        BigDecimal(eventJson.getString("rotation_z"))
+                    )
                 }
 
             } catch (e: Exception) {
                 e.printStackTrace()
             }
 
-            if (configuration.realTimeMode == 0) { // real-time
-                when (configuration.filterType) {
-                    0 -> applyBagileviFilter(instant)
-                    1 -> applyLowPassFilter(instant)
-                    2 -> applyNoFilter(instant)
-                    3 -> applyRotationMatrixFilter(instant)
-                }
+            // Apply filters regardless of real-time mode for step detection
+            when (configuration.filterType) {
+                0 -> applyBagileviFilter(instant)
+                1 -> applyLowPassFilter(instant)
+                2 -> applyNoFilter(instant)
+                3 -> applyRotationMatrixFilter(instant)
+                4 -> applyButterworthFilter(instant)
+            }
 
-                if (configuration.recognitionAlgorithm == 1) {
-                    applyIntersectionCorrection(instant)
-                }
+            if (configuration.recognitionAlgorithm == 1 && configuration.filterType != 4) {
+                applyIntersectionCorrection(instant)
+            }
 
-                if (stepDetected) {
+            if (stepDetected) {
+                // Check for false steps based on time filtering (algorithm 2)
+                if (configuration.recognitionAlgorithm == 2) {
+                    checkTimeFilteringFalseStep()
+                }
+                
+                // Check for false steps based on Butterworth filter
+                if (configuration.filterType == 4) {
+                    checkButterworthFalseStep()
+                }
+                
+                // Check for false steps based on magnetometer data (non-real-time mode)
+                if (configuration.realTimeMode == 1) {
+                    checkFalseStep()
+                }
+                
+                if (!falseStep) {
                     stepsCount++
                     // Store chart entry instead of adding directly to chart
                     chartEntries.add(Entry(counter.toFloat(), lastAccelerationMagnitude!!.toFloat()))
+                } else {
+                    falseStep = false
+                    // Could mark false steps in the chart with icons
+                }
+            } else {
+                // Add magnetometer values for false step detection
+                if (configuration.realTimeMode == 1) {
+                    sumResMagn.add(resultMagn)
                 }
             }
         }
@@ -384,12 +489,29 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                     alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
                 }
+                
+                // Calculate magnetometer magnitude for false step detection
+                if (configuration.realTimeMode == 1) {
+                    val magn = magnetometer.rawValues
+                    vectorMagn[0] = magn[0].toFloat()
+                    vectorMagn[1] = magn[1].toFloat()
+                    vectorMagn[2] = magn[2].toFloat()
+                    resultMagn = kotlin.math.sqrt(
+                        kotlin.math.sqrt(vectorMagn[0] * vectorMagn[0] + vectorMagn[1] * vectorMagn[1]).pow(2) + vectorMagn[2] * vectorMagn[2]
+                    )
+                }
 
                 val filtered = filters.lowPassFilter(accelerometer.rawValues, alpha!!)
                 accelerometer.filteredValues = filtered
                 accelerometer.filteredResultant = calculations.resultant(filtered)
 
-                if (keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)) {
+                val detectionResult = when (configuration.recognitionAlgorithm) {
+                    1 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
+                    2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(accelerometer.filteredResultant, instant)
+                    else -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
+                }
+
+                if (detectionResult) {
                     stepDetected = stepDetection.detectStepByPeakDifference()
                 } else {
                     stepDetected = false
@@ -437,6 +559,146 @@ class ConfigurationsComparison : AppCompatActivity() {
                 stepDetected = stepDetected && stepDetection.detectStepByCrossing()
             } else {
                 stepDetected = false
+            }
+        }
+        
+        private fun applyButterworthFilter(instant: Long) {
+            if (accelerometerEvent) {
+                // Update sampling frequency
+                date = Calendar.getInstance().apply { timeInMillis = instant }
+                val second = date!!.get(Calendar.SECOND)
+
+                if (firstSignal) {
+                    firstSecond = second
+                    currentSecond = second
+                    firstSignal = false
+                }
+
+                if (second == firstSecond) {
+                    signalCount++
+                    samplingRateValue++
+                } else if (second == currentSecond) {
+                    signalCount++
+                } else {
+                    currentSecond = second
+                    samplingRateValue = signalCount
+                    signalCount = 0
+                }
+                
+                // Calculate magnetometer magnitude for false step detection
+                if (configuration.realTimeMode == 1) {
+                    val magn = magnetometer.rawValues
+                    vectorMagn[0] = magn[0].toFloat()
+                    vectorMagn[1] = magn[1].toFloat()
+                    vectorMagn[2] = magn[2].toFloat()
+                    resultMagn = kotlin.math.sqrt(
+                        kotlin.math.sqrt(vectorMagn[0] * vectorMagn[0] + vectorMagn[1] * vectorMagn[1]).pow(2) + vectorMagn[2] * vectorMagn[2]
+                    )
+                }
+
+                val filtered = filters.butterworthFilter(accelerometer.rawValues, cutoffSelected, samplingRateValue)
+                accelerometer.filteredValues = filtered
+                accelerometer.filteredResultant = calculations.resultant(filtered)
+
+                val detectionResult = when (configuration.recognitionAlgorithm) {
+                    2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(accelerometer.filteredResultant, instant)
+                    1 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
+                    else -> false
+                }
+
+                if (detectionResult) {
+                    stepDetected = stepDetection.detectStepByPeakDifference()
+                } else {
+                    stepDetected = false
+                }
+            }
+        }
+        
+        private fun checkFalseStep() {
+            if (configuration.realTimeMode == 1) {
+                val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
+                sumResMagn.clear()
+
+                if (countFour < 4) {
+                    resLast4Steps.add(averageRes)
+                    countFour++
+                } else {
+                    falseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
+                    resLast4Steps.removeAt(0)
+                    resLast4Steps.add(averageRes)
+                    countFour = 0
+                }
+                resultMagnPrev = averageRes
+            }
+        }
+        
+        private fun checkTimeFilteringFalseStep() {
+            if (configuration.recognitionAlgorithm == 2) {
+                val aNPeakValley = configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime
+                val aN1PeakValley = configuration.exMax!! - configuration.exMin!!
+                val diff = kotlin.math.abs(aNPeakValley.toDouble() - aN1PeakValley.toDouble())
+
+                falseStep = (diff == 0.0)
+            }
+        }
+
+        /*private fun checkButterworthFalseStep() {
+            if (configuration.filterType == 4) {
+                val magnNPeakValley = configuration.lastLocalMaxAccel.toDouble() -
+                                     configuration.lastLocalMinAccel.toDouble()
+
+                if (oldMagn != 0.0) {
+                    val diffMagn = magnNPeakValley - oldMagn
+                    val fi2 = kotlin.math.abs(kotlin.math.ceil(samplingRateValue / kotlin.math.abs(diffMagn) * 2))
+                    val aNPeakValley = configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime
+                    val aN1PeakValley = configuration.exMax!! - configuration.exMin!!
+                    val timeDifference = kotlin.math.abs(aNPeakValley.toDouble() - aN1PeakValley.toDouble())
+
+                    if (!falseStep) {
+                        if (fi2 > 180 && timeDifference < 2.1) {
+                            falseStep = true
+                        }
+                    }
+
+                    cutoffSelected = when {
+                        fi2 < 183 -> {
+                            if (timeDifference > 40) samplingRateValue / 20.0
+                            else samplingRateValue / 7.0
+                        }
+                        fi2 < 81 -> {
+                            if (timeDifference > 20) samplingRateValue / 15.0
+                            else samplingRateValue / 6.0
+                        }
+                        else -> 0.0
+                    }
+                }
+
+                oldMagn = magnNPeakValley
+            }
+        }*/
+
+        private fun checkButterworthFalseStep() {
+            if (configuration.filterType == 4) {
+                val magnNPeakValley = configuration.lastLocalMaxAccel.toDouble() -
+                        configuration.lastLocalMinAccel.toDouble()
+
+                if (oldMagn != 0.0) {
+                    val diffMagn = kotlin.math.abs(magnNPeakValley - oldMagn)
+                    val timeDiff = kotlin.math.abs(
+                        (configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime).toDouble() -
+                                (configuration.exMax!! - configuration.exMin!!).toDouble()
+                    )
+
+                    if (!falseStep && diffMagn < 0.4 && timeDiff < 1.8) {
+                        falseStep = true
+                    }
+
+                    val base = samplingRateValue / 6.0
+                    val adjustment = if (diffMagn < 0.8) 0.5 else 1.0
+                    cutoffSelected = (base * adjustment).coerceIn(1.5, 10.0)
+                }
+
+                oldMagn = magnNPeakValley
             }
         }
 
