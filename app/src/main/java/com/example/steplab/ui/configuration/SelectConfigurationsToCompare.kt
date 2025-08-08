@@ -33,7 +33,7 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
         numberSelected = findViewById(R.id.number_selected)
         frameLayout = findViewById(R.id.frame_layout)
 
-        enterSettingsFragment = EnterSettingsFragment(appConfiguration, false)
+        enterSettingsFragment = EnterSettingsFragment(appConfiguration, false, false)
         supportFragmentManager.beginTransaction()
             .replace(R.id.frame_layout, enterSettingsFragment)
             .commit()
@@ -54,7 +54,7 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
 
                 if (numberOfConfigurationsSelected < 6) {
                     appConfiguration = Configuration()
-                    enterSettingsFragment = EnterSettingsFragment(appConfiguration, false)
+                    enterSettingsFragment = EnterSettingsFragment(appConfiguration, false, false)
                     supportFragmentManager.beginTransaction()
                         .setCustomAnimations(
                             R.anim.enter_from_left,
