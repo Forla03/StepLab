@@ -191,7 +191,7 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.filterType = 0
                 hideCutoffFrequency()
-                uncheckAllFiltersExcept(filterBagilevi)
+                uncheckAllFiltersExceptKeepingFalseStep(filterBagilevi)
             }
         }
 
@@ -200,7 +200,7 @@ class EnterSettingsFragment(
                 configuration.filterType = 1
                 configuration.detectionThreshold = BigDecimal.valueOf(5)
                 showCutoffFrequency()
-                uncheckAllFiltersExcept(filterLowPass)
+                uncheckAllFiltersExceptKeepingFalseStep(filterLowPass)
                 if (!first) scrollView?.post { scrollView?.fullScroll(View.FOCUS_DOWN) } else first = false
             }
         }
@@ -210,7 +210,7 @@ class EnterSettingsFragment(
                 configuration.filterType = 2
                 configuration.detectionThreshold = BigDecimal.valueOf(5)
                 hideCutoffFrequency()
-                uncheckAllFiltersExcept(noFilter)
+                uncheckAllFiltersExceptKeepingFalseStep(noFilter)
             }
         }
 
@@ -219,7 +219,7 @@ class EnterSettingsFragment(
                 configuration.filterType = 3
                 configuration.detectionThreshold = BigDecimal.valueOf(8)
                 hideCutoffFrequency()
-                uncheckAllFiltersExcept(filterRotation)
+                uncheckAllFiltersExceptKeepingFalseStep(filterRotation)
             }
         }
 
@@ -227,18 +227,21 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.filterType = 4
                 hideCutoffFrequency()
-                uncheckAllFiltersExcept(butterworthFilter)
-                recognitionPeak?.isChecked = false
+                uncheckAllFiltersExceptKeepingFalseStep(butterworthFilter)
+                // Remove forced deactivation of Peak algorithm - Butterworth can work with all algorithms
             }
         }
 
         falseStepRadio?.setOnCheckedChangeListener { _, isChecked ->
             if (isChecked) {
-                configuration.filterType = 4
+                // False step detection can work with any filter, set it as a flag instead
+                configuration.falseStepDetectionEnabled = true
+                configuration.realTimeMode = 1 // Enable non-real-time mode for false step detection
                 autocorrelation?.isChecked = false
-                hideCutoffFrequency()
-                uncheckAllFiltersExcept(falseStepRadio)
-                recognitionPeak?.isChecked = false
+                // Allow user to choose filter type independently
+                // Remove forced deactivation of Peak algorithm
+            } else {
+                configuration.falseStepDetectionEnabled = false
             }
         }
 
@@ -248,8 +251,8 @@ class EnterSettingsFragment(
                 falseStepRadio?.isChecked = false
                 hideCutoffFrequency()
                 layoutSamplingRate?.visibility = View.GONE
-                uncheckAllFiltersExcept(autocorrelation)
-                recognitionPeak?.isChecked = false
+                uncheckAllFiltersExcept(autocorrelation) // Keep original behavior for autocorrelation
+                // Allow autocorrelation to work with different recognition algorithms
             }
         }
 
@@ -278,6 +281,21 @@ class EnterSettingsFragment(
             filterBagilevi, filterLowPass, noFilter, filterRotation,
             butterworthFilter, falseStepRadio, autocorrelation
         ).filter { it != checked }.forEach { it?.isChecked = false }
+    }
+
+    private fun uncheckAllFiltersExceptKeepingFalseStep(checked: RadioButton?) {
+        val shouldKeepFalseStep = configuration.realTimeMode == 1 && falseStepRadio?.isChecked == true
+        listOf(
+            filterBagilevi, filterLowPass, noFilter, filterRotation,
+            butterworthFilter, autocorrelation
+        ).filter { it != checked }.forEach { it?.isChecked = false }
+        
+        // Keep falseStepRadio checked if we're in non-real-time mode and it was checked
+        if (shouldKeepFalseStep && checked != falseStepRadio) {
+            // Don't uncheck falseStepRadio in non-real-time mode
+        } else if (checked != falseStepRadio) {
+            falseStepRadio?.isChecked = false
+        }
     }
 
     private fun showCutoffFrequency() {

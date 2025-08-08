@@ -51,7 +51,9 @@ data class Configuration(
     /** Magnitude of previous local minimum (used for valley tuning) */
     var previousLocalMin: BigDecimal = BigDecimal.ZERO,
     /** Whether to enable autocorrelation algorithm (if used) */
-    var autocorcAlg: Boolean = false
+    var autocorcAlg: Boolean = false,
+    /** Whether to enable false step detection */
+    var falseStepDetectionEnabled: Boolean = false
 ) : Serializable, Cloneable {
 
     /**

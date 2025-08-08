@@ -55,10 +55,12 @@ class AdapterForConfigurationsCard(
         holder.steps.text = stepCounts[position].toString()
 
         // Modality
-        holder.modality.text = context.getString(R.string.modality_italic) + when (config.realTimeMode) {
+        val modalityText = when (config.realTimeMode) {
             0 -> context.getString(R.string.real_time)
             else -> context.getString(R.string.not_real_time)
         }
+        val falseStepText = if (config.falseStepDetectionEnabled) " + False Step Detection" else ""
+        holder.modality.text = context.getString(R.string.modality_italic) + modalityText + falseStepText
 
         // Step detection algorithm
         holder.algorithm.text = context.getString(R.string.step_recognition_algorithm_italic) + when (config.recognitionAlgorithm) {

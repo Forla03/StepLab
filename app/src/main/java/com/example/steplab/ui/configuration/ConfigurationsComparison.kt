@@ -2,6 +2,7 @@ package com.example.steplab.ui.configuration
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.ProgressBar
@@ -397,7 +398,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                         BigDecimal(eventJson.getString("gravity_z"))
                     ))
                 } else if (eventJson.has("rotation_x")) {
-                    accelerometerEvent = false
+                   //accelerometerEvent = false
                     rotation.rawValues = arrayOf(
                         BigDecimal(eventJson.getString("rotation_x")),
                         BigDecimal(eventJson.getString("rotation_y")),
@@ -429,12 +430,12 @@ class ConfigurationsComparison : AppCompatActivity() {
                 }
                 
                 // Check for false steps based on Butterworth filter
-                if (configuration.filterType == 4) {
+                if (configuration.filterType == 4 && configuration.falseStepDetectionEnabled) {
                     checkButterworthFalseStep()
                 }
                 
                 // Check for false steps based on magnetometer data (non-real-time mode)
-                if (configuration.realTimeMode == 1) {
+                if (configuration.realTimeMode == 1 && configuration.falseStepDetectionEnabled) {
                     checkFalseStep()
                 }
                 
@@ -448,7 +449,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                 }
             } else {
                 // Add magnetometer values for false step detection
-                if (configuration.realTimeMode == 1) {
+                if (configuration.realTimeMode == 1 && configuration.falseStepDetectionEnabled) {
                     sumResMagn.add(resultMagn)
                 }
             }
@@ -489,9 +490,9 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                     alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
                 }
-                
+
                 // Calculate magnetometer magnitude for false step detection
-                if (configuration.realTimeMode == 1) {
+                if (configuration.realTimeMode == 1 && configuration.falseStepDetectionEnabled) {
                     val magn = magnetometer.rawValues
                     vectorMagn[0] = magn[0].toFloat()
                     vectorMagn[1] = magn[1].toFloat()
@@ -500,6 +501,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                         kotlin.math.sqrt(vectorMagn[0] * vectorMagn[0] + vectorMagn[1] * vectorMagn[1]).pow(2) + vectorMagn[2] * vectorMagn[2]
                     )
                 }
+                //Log.d("FILTER", "KOTLIN: samplingRate=$samplingRateValue cutoff=$cutoffFrequencyValue alpha=$alpha")
 
                 val filtered = filters.lowPassFilter(accelerometer.rawValues, alpha!!)
                 accelerometer.filteredValues = filtered
@@ -586,7 +588,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                 }
                 
                 // Calculate magnetometer magnitude for false step detection
-                if (configuration.realTimeMode == 1) {
+                if (configuration.realTimeMode == 1 && configuration.falseStepDetectionEnabled) {
                     val magn = magnetometer.rawValues
                     vectorMagn[0] = magn[0].toFloat()
                     vectorMagn[1] = magn[1].toFloat()
@@ -601,8 +603,9 @@ class ConfigurationsComparison : AppCompatActivity() {
                 accelerometer.filteredResultant = calculations.resultant(filtered)
 
                 val detectionResult = when (configuration.recognitionAlgorithm) {
-                    2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(accelerometer.filteredResultant, instant)
+                    0 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
                     1 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
+                    2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(accelerometer.filteredResultant, instant)
                     else -> false
                 }
 
@@ -615,7 +618,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         }
         
         private fun checkFalseStep() {
-            if (configuration.realTimeMode == 1) {
+            if (configuration.realTimeMode == 1 && configuration.falseStepDetectionEnabled) {
                 val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
                 sumResMagn.clear()
 
@@ -678,7 +681,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         }*/
 
         private fun checkButterworthFalseStep() {
-            if (configuration.filterType == 4) {
+            if (configuration.filterType == 4 && configuration.falseStepDetectionEnabled) {
                 val magnNPeakValley = configuration.lastLocalMaxAccel.toDouble() -
                         configuration.lastLocalMinAccel.toDouble()
 
