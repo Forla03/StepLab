@@ -13,13 +13,14 @@ import java.math.BigDecimal
 
 class EnterSettingsFragment(
     private val configuration: Configuration = Configuration(),
-    private val showSamplingRate: Boolean = true
+    private val showSamplingRate: Boolean = true,
+    private val isLiveTesting: Boolean = false
 ) : Fragment() {
 
     // Alternative constructors for Java compatibility
-    constructor() : this(Configuration(), true)
+    constructor() : this(Configuration(), true, false)
     
-    constructor(configuration: Configuration) : this(configuration, true)
+    constructor(configuration: Configuration) : this(configuration, true, true) // Live testing by default
 
     private var first = true
 
@@ -102,6 +103,12 @@ class EnterSettingsFragment(
             textSamplingRate?.visibility = View.VISIBLE
             layoutSamplingRate?.visibility = View.VISIBLE
             firstView?.visibility = View.VISIBLE
+        }
+
+        // Disable autocorrelation in live testing mode
+        if (isLiveTesting) {
+            autocorrelation?.isEnabled = false
+            autocorrelation?.alpha = 0.5f // Make it visually disabled
         }
 
         setupListeners()

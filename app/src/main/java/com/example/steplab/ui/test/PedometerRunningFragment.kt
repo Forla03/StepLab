@@ -31,49 +31,13 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     private var magnetometer: Sensor? = null
     private var gravitySensor: Sensor? = null
 
-    private var isAccelerometerEvent = false
-    private val accelerometerData = SensorData()
-    private val accelerometerXAxis = SensorData()
-    private val magnetometerData = SensorData()
-    private lateinit var filters: Filters
-    private lateinit var calculations: Calculations
-    private lateinit var keyValueRecognition: KeyValueRecognition
-    private lateinit var stepDetection: StepDetection
     private lateinit var configuration: Configuration
+    private lateinit var stepDetectionProcessor: StepDetectionProcessor
 
-    private var stepDetected = false
     private var samplingPeriodMicros: Int = 0
-    private var samplingRate: Int = 0
-    private var selectedCutoffIndex: Int = 0
-    private var cutoffFrequencyValue: Int = 0
-    private var alpha: BigDecimal = BigDecimal("0.1")
-
-    private var currentSecond: Int = 0
-    private var firstSecond: Int = 0
-    private var sensorEventCount: Int = 0
     private var stepCount: Int = 0
     private var counter: Int = 0
     private var timestamp: Long = 0
-    
-    // For Butterworth filter support
-    private var firstSignal: Boolean = true
-    private var signalCount: Int = 0
-    private var currentSecond_var: Int = 0
-    private var cutoffSelected: Double = 0.0
-    
-    // Reuse Calendar instance to avoid frequent object creation
-    private val calendar = Calendar.getInstance()
-    
-    // Reuse BigDecimal arrays to reduce object creation
-    private val reusableValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
-    private val reusableMagnetometerValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
-    private val reusableGravityValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
-    
-    // Throttling for rotation matrix calculations (very expensive)
-    private var rotationMatrixUpdateCounter = 0
-    
-    // Cache last world acceleration values to avoid recalculating every time
-    private var lastWorldValues: Array<BigDecimal>? = null
 
     private lateinit var chartLine: LineDataSet
     private lateinit var chartData: LineData
@@ -99,15 +63,7 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     }
 
     private fun initializeWithConfiguration() {
-        filters = Filters(configuration)
-        calculations = Calculations(configuration)
-        keyValueRecognition = KeyValueRecognition(configuration)
-        stepDetection = StepDetection(configuration)
-        configuration.lastDetectedStepTime = 0L
-
-        calendar.timeInMillis = System.currentTimeMillis()
-        currentSecond = calendar.get(Calendar.SECOND)
-        firstSecond = currentSecond
+        stepDetectionProcessor = StepDetectionProcessor(configuration)
         stepCount = 0
         counter = 0
     }
@@ -135,40 +91,11 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         lineChart.data = chartData
 
         when (configuration.samplingFrequencyIndex) {
-            0 -> {
-                samplingRate = 20
-                samplingPeriodMicros = 50000
-            }
-            1 -> {
-                samplingRate = 40
-                samplingPeriodMicros = 25000
-            }
-            2 -> {
-                samplingRate = 50
-                samplingPeriodMicros = 20000
-            }
-            3 -> {
-                samplingRate = 100
-                samplingPeriodMicros = 10000
-            }
-            4 -> {
-                samplingRate = 250
-                samplingPeriodMicros = SensorManager.SENSOR_DELAY_FASTEST
-            }
-        }
-        sensorEventCount = samplingRate
-
-        selectedCutoffIndex = configuration.cutoffFrequencyIndex
-        if (selectedCutoffIndex == 3) {
-            alpha = BigDecimal("0.1")
-        } else {
-            cutoffFrequencyValue = when (selectedCutoffIndex) {
-                0 -> 2
-                1 -> 3
-                2 -> 10
-                else -> 2
-            }
-            alpha = calculateAlpha(samplingRate, cutoffFrequencyValue)
+            0 -> samplingPeriodMicros = 50000
+            1 -> samplingPeriodMicros = 25000
+            2 -> samplingPeriodMicros = 20000
+            3 -> samplingPeriodMicros = 10000
+            4 -> samplingPeriodMicros = SensorManager.SENSOR_DELAY_FASTEST
         }
 
         sensorManager = requireContext().getSystemService(Context.SENSOR_SERVICE) as SensorManager
@@ -199,231 +126,41 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
 
     override fun onSensorChanged(event: SensorEvent) {
         timestamp = System.currentTimeMillis()
-        stepDetected = false
 
-        when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                isAccelerometerEvent = true
-                // Reuse array to reduce object creation
-                reusableValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
-                reusableValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
-                reusableValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
-                
-                accelerometerData.rawValues = reusableValues
-                accelerometerXAxis.rawValues = reusableValues
+        // Process sensor data using the helper class
+        val result = stepDetectionProcessor.processRealTimeSensorData(
+            event.sensor.type,
+            event.values,
+            timestamp
+        )
 
-                calendar.timeInMillis = timestamp
-                val second = calendar.get(Calendar.SECOND)
-                if (second != firstSecond) {
-                    if (second == currentSecond) {
-                        sensorEventCount++
-                    } else {
-                        samplingRate = sensorEventCount
-                        if (selectedCutoffIndex != 3) {
-                            cutoffFrequencyValue = when (selectedCutoffIndex) {
-                                0 -> 2
-                                1 -> 3
-                                2 -> 10
-                                else -> 2
-                            }
-                            alpha = calculateAlpha(samplingRate, cutoffFrequencyValue)
-                        }
-                        currentSecond = second
-                        sensorEventCount = 0
-                    }
-                }
-            }
-
-            Sensor.TYPE_MAGNETIC_FIELD -> {
-                isAccelerometerEvent = false
-                reusableMagnetometerValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
-                reusableMagnetometerValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
-                reusableMagnetometerValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
-                magnetometerData.rawValues = reusableMagnetometerValues
-            }
-
-            Sensor.TYPE_GRAVITY -> {
-                isAccelerometerEvent = false
-                reusableGravityValues[0] = BigDecimal.valueOf(event.values[0].toDouble())
-                reusableGravityValues[1] = BigDecimal.valueOf(event.values[1].toDouble())
-                reusableGravityValues[2] = BigDecimal.valueOf(event.values[2].toDouble())
-                configuration.gravity = calculations.resultant(reusableGravityValues)
-            }
+        // Update chart for accelerometer events (works for both real-time and non-real-time modes)
+        if (stepDetectionProcessor.accelerometerEvent) {
+            updateChart(result)
         }
 
-        if (configuration.realTimeMode == 0 && isAccelerometerEvent) {
-            when (configuration.filterType) {
-                0 -> { // Bagilevi Filter
-                    val filtered = filters.bagileviFilter(accelerometerData.rawValues)
-                    accelerometerData.filteredResultant = filtered
-                    stepDetected = stepDetection.detectStepByBagilevi(
-                        keyValueRecognition.recognizeLocalExtremaRealtimeBagilevi(filtered, timestamp)
-                    )
-
-                    chartLine.label = "Acceleration - Bagilevi Filter"
-                    chartData = lineChart.data
-                    chartData.addEntry(Entry(counter.toFloat(), filtered.toFloat()), 0)
-                    chartData.notifyDataChanged()
-                    lineChart.notifyDataSetChanged()
-                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-                    lineChart.moveViewToX(chartData.entryCount.toFloat())
-                    counter++
-                }
-
-                1 -> { // Low-pass Filter
-                    val filtered = filters.lowPassFilter(accelerometerData.rawValues, alpha)
-                    accelerometerData.filteredValues = filtered
-                    val magnitude = calculations.resultant(filtered)
-                    accelerometerData.filteredResultant = magnitude
-
-                    if (keyValueRecognition.recognizeLocalExtremaRealtime(magnitude, timestamp)) {
-                        stepDetected = stepDetection.detectStepByPeakDifference()
-                    }
-
-                    chartLine.label = "Acceleration - Low Pass Filter"
-                    chartData = lineChart.data
-                    chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
-                    chartData.notifyDataChanged()
-                    lineChart.notifyDataSetChanged()
-                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-                    lineChart.moveViewToX(chartData.entryCount.toFloat())
-                    counter++
-                }
-
-                2 -> { // No Filter
-                    val magnitude = calculations.resultant(accelerometerData.rawValues)
-                    accelerometerData.resultant = magnitude
-
-                    if (keyValueRecognition.recognizeLocalExtremaRealtime(magnitude, timestamp)) {
-                        stepDetected = stepDetection.detectStepByPeakDifference()
-                    }
-
-                    chartLine.label = "Acceleration - No Filter"
-                    chartData = lineChart.data
-                    chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
-                    chartData.notifyDataChanged()
-                    lineChart.notifyDataSetChanged()
-                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-                    lineChart.moveViewToX(chartData.entryCount.toFloat())
-                    counter++
-                }
-
-                3 -> { // Rotation Matrix Filter
-                    if (accelerometerData.instantiated && magnetometerData.instantiated) {
-                        // Throttle rotation matrix calculations - very expensive operation
-                        rotationMatrixUpdateCounter++
-                        if (rotationMatrixUpdateCounter % 5 == 0) { // Update rotation matrix every 5th accelerometer event
-                            calculations.updateRotationMatrix(accelerometerData.rawValues, magnetometerData.rawValues)
-                            // Recalculate world values when rotation matrix is updated
-                            lastWorldValues = calculations.worldAcceleration(accelerometerData.rawValues)
-                            accelerometerData.worldValues = lastWorldValues!!
-                        } else if (lastWorldValues != null) {
-                            // Use cached rotation matrix for world acceleration calculation (much faster)
-                            lastWorldValues = calculations.worldAcceleration(accelerometerData.rawValues)
-                            accelerometerData.worldValues = lastWorldValues!!
-                        }
-
-                        // Always update chart and step detection for fluidity
-                        if (lastWorldValues != null) {
-                            val zAxis = lastWorldValues!![2]
-                            if (keyValueRecognition.recognizeLocalExtremaRealtime(zAxis, timestamp)) {
-                                stepDetected = stepDetection.detectStepByPeakDifference()
-                            }
-
-                            chartLine.label = "Acceleration - Rotation Matrix Filter (Z axis)"
-                            chartData = lineChart.data
-                            chartData.addEntry(Entry(counter.toFloat(), zAxis.toFloat()), 0)
-                            chartData.notifyDataChanged()
-                            lineChart.notifyDataSetChanged()
-                            lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-                            lineChart.moveViewToX(chartData.entryCount.toFloat())
-                            counter++
-                        }
-                    }
-                }
-
-                4 -> { // Butterworth Filter
-                    // Update sampling rate dynamically
-                    val currentSecond = Calendar.getInstance().get(Calendar.SECOND)
-                    if (firstSignal) {
-                        firstSecond = currentSecond
-                        currentSecond_var = currentSecond
-                        firstSignal = false
-                    }
-
-                    if (currentSecond == firstSecond) {
-                        signalCount++
-                        samplingRate++
-                    } else if (currentSecond == currentSecond_var) {
-                        signalCount++
-                    } else {
-                        currentSecond_var = currentSecond
-                        samplingRate = signalCount
-                        signalCount = 0
-                    }
-
-                    val filtered = filters.butterworthFilter(accelerometerData.rawValues, cutoffSelected, samplingRate)
-                    accelerometerData.filteredValues = filtered
-                    val magnitude = calculations.resultant(filtered)
-                    accelerometerData.filteredResultant = magnitude
-
-                    val detectionResult = when (configuration.recognitionAlgorithm) {
-                        2 -> keyValueRecognition.recognizeLocalExtremaTimeFiltering(magnitude, timestamp)
-                        1 -> keyValueRecognition.recognizeLocalExtremaRealtime(magnitude, timestamp)
-                        else -> false
-                    }
-
-                    if (detectionResult) {
-                        stepDetected = stepDetection.detectStepByPeakDifference()
-                    }
-
-                    chartLine.label = "Acceleration - Butterworth Filter"
-                    chartData = lineChart.data
-                    chartData.addEntry(Entry(counter.toFloat(), magnitude.toFloat()), 0)
-                    chartData.notifyDataChanged()
-                    lineChart.notifyDataSetChanged()
-                    lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
-                    lineChart.moveViewToX(chartData.entryCount.toFloat())
-                    counter++
-                }
-            }
-
-            if (configuration.recognitionAlgorithm == 1) {
-                if (isAccelerometerEvent) {
-                    val magnitude = calculations.resultant(accelerometerXAxis.rawValues)
-                    accelerometerXAxis.resultant = magnitude
-                    val linear = calculations.linearAcceleration(magnitude)
-                    accelerometerXAxis.linearResultant = linear
-                    keyValueRecognition.recognizeXAxisIntersectionRealtime(linear, timestamp)
-                    stepDetected = stepDetected && stepDetection.detectStepByCrossing()
-                } else {
-                    stepDetected = false
-                }
-            }
-        }
-
-        if (stepDetected) {
+        if (result.stepDetected) {
             onStepDetected()
         }
-
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
         // Ignored for now
     }
 
+    private fun updateChart(result: StepDetectionProcessor.ProcessingResult) {
+        chartLine.label = result.chartLabel
+        chartData = lineChart.data
+        chartData.addEntry(Entry(counter.toFloat(), result.filteredValue.toFloat()), 0)
+        chartData.notifyDataChanged()
+        lineChart.notifyDataSetChanged()
+        lineChart.setVisibleXRangeMaximum(MainActivity.NUMBER_OF_DOTS_IN_GRAPH.toFloat())
+        lineChart.moveViewToX(chartData.entryCount.toFloat())
+        counter++
+    }
+
     private fun onStepDetected() {
         stepCount++
         stepCountTextView.text = stepCount.toString()
-    }
-
-    private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {
-        val sampling = BigDecimal.ONE.divide(BigDecimal.valueOf(samplingRate.toLong()), MathContext.DECIMAL32)
-        val cutoff = BigDecimal.ONE.divide(
-            BigDecimal(2).multiply(BigDecimal.valueOf(Math.PI), MathContext.DECIMAL32)
-                .multiply(BigDecimal.valueOf(cutoffFrequency.toLong()), MathContext.DECIMAL32),
-            MathContext.DECIMAL32
-        )
-        return sampling.divide(sampling.add(cutoff), MathContext.DECIMAL32)
     }
 }
