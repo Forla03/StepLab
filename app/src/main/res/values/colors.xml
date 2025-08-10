@@ -9,4 +9,13 @@
     <color name="white">#FFFFFFFF</color>
 
     <color name="light_grey">#FFA9A9A9</color>
+    
+    <!-- Dark theme colors for better readability -->
+    <color name="dark_primary">#FF4A90E2</color>
+    <color name="dark_primary_variant">#FF2E5F8A</color>
+    <color name="dark_secondary">#FF26C6DA</color>
+    <color name="dark_secondary_variant">#FF00838F</color>
+    <color name="dark_background">#FF1E1E1E</color>
+    <color name="dark_surface">#FF2D2D2D</color>
+    <color name="dark_on_surface">#FFE0E0E0</color>
 </resources>

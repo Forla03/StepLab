@@ -45,13 +45,7 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
 
             if (numberOfConfigurationsSelected < 7) {
                 numberSelected.text = "($numberOfConfigurationsSelected)"
-                
-                // Print configuration before saving
-                println("=== CONFIGURATION BEFORE SAVING ===")
-                println("Configuration #$numberOfConfigurationsSelected:")
-                println(appConfiguration.toString())
-                println("===================================")
-                
+
                 // If autocorrelation is active, create a proper autocorrelation configuration
                 val configurationToSave = if (appConfiguration.autocorcAlg) {
                     Configuration().apply {
@@ -70,12 +64,6 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
                 }
                 
                 configurations.add(configurationToSave)
-                
-                // Print the actual saved configuration
-                println("=== CONFIGURATION ACTUALLY SAVED ===")
-                println("Saved Configuration #$numberOfConfigurationsSelected:")
-                println(configurationToSave.toString())
-                println("=====================================")
 
                 Toast.makeText(
                     this,

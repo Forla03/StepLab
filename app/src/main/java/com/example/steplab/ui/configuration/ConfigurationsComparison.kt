@@ -1,4 +1,5 @@
 package com.example.steplab.ui.configuration
+
 import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
@@ -22,11 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.math.BigDecimal
-import java.math.MathContext
-import java.text.DecimalFormat
 import java.util.*
-import kotlin.math.pow
 
 class ConfigurationsComparison : AppCompatActivity() {
 
@@ -100,7 +97,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         val keysList = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
         var index = 0
 
-        // Crea dataset baseline
+        // Baseline dataset (red)
         val baseLine = LineDataSet(null, "Magnitude of Acceleration").apply {
             color = Color.RED
             setDrawCircles(false)
@@ -149,10 +146,10 @@ class ConfigurationsComparison : AppCompatActivity() {
         // Show progress bar
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
-        
+
         lifecycleScope.launch(Dispatchers.Default) {
             val processedConfigurations = mutableListOf<ProcessedConfiguration>()
-            
+
             for (i in configurations.indices) {
                 val config = configurations[i]
 
@@ -163,24 +160,19 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                     // Check if autocorrelation algorithm is enabled
                     if (clonedConfig.autocorcAlg) {
-                        println("=== AUTOCORRELATION DEBUG - CONFIG $i ===")
-                        println("Starting autocorrelation processing for config: ${clonedConfig}")
                         context.processAutocorrelationAlgorithm()
-                        println("Autocorrelation finished with steps: ${context.stepsCount}")
-                        println("=== END AUTOCORRELATION DEBUG - CONFIG $i ===")
                     } else {
                         // Process all events for this configuration in background
                         val keys = jsonObject.keys()
                         var processedEvents = 0
-                        val totalEvents = jsonObject.length()
-                        
+
                         while (keys.hasNext()) {
                             val key = keys.next()
                             val eventJson = jsonObject.getJSONObject(key)
                             context.myOnSensorChanged(key.toLong(), eventJson)
-                            
+
                             processedEvents++
-                            
+
                             // Yield control every 100 events to prevent ANR
                             if (processedEvents % 100 == 0) {
                                 kotlinx.coroutines.yield()
@@ -261,11 +253,11 @@ class ConfigurationsComparison : AppCompatActivity() {
         val index: Int
     ) {
         private val stepDetectionProcessor = StepDetectionProcessor(configuration)
-        
+
         var stepsCount: Int
             get() = stepDetectionProcessor.stepsCount
             private set(value) {} // Read-only from outside
-        
+
         val chartEntries: MutableList<Entry>
             get() = stepDetectionProcessor.chartEntries
 

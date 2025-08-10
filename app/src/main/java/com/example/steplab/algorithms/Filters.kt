@@ -199,7 +199,7 @@ class Filters(
     }
 
     /**
-     * Zero-phase filtering: forward + reverse con reset stato.
+     * Zero-phase filtering: forward + reverse with state reset.
      */
     fun filterMagnitudeBandPassSeriesZeroPhase(
         magNoDc: DoubleArray,

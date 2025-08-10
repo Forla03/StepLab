@@ -45,7 +45,7 @@
                 android:id="@+id/number_selected"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:textColor="@color/black"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textStyle="bold"
                 android:textSize="20dp">
             </TextView>

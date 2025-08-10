@@ -92,7 +92,7 @@ class SendTest : AppCompatActivity() {
                             )
                             filesToShare.add(uri)
                         } catch (e: Exception) {
-                            println("Error creating file: ${file.absolutePath} - ${e.message}")
+                            e.printStackTrace()
                         }
                     }
                 }

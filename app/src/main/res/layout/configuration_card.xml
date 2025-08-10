@@ -34,7 +34,7 @@
                     android:padding="5dp"
                     android:background="@drawable/radius_white"
                     android:textStyle="italic|bold"
-                    android:textColor="@color/black"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="18sp" />
             </LinearLayout>
 
@@ -52,25 +52,25 @@
                     android:layout_height="wrap_content"
                     android:paddingTop="5dp"
                     android:paddingBottom="5dp"
-                    android:textColor="@color/black"/>
+                    android:textColor="?android:attr/textColorPrimary"/>
                 <TextView
                     android:id="@+id/algorithm"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingBottom="5dp"
-                    android:textColor="@color/black"/>
+                    android:textColor="?android:attr/textColorPrimary"/>
                 <TextView
                     android:id="@+id/filter"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingBottom="5dp"
-                    android:textColor="@color/black"/>
+                    android:textColor="?android:attr/textColorPrimary"/>
                 <TextView
                     android:id="@+id/frequency"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:paddingBottom="5dp"
-                    android:textColor="@color/black"/>
+                    android:textColor="?android:attr/textColorPrimary"/>
             </LinearLayout>
 
             <LinearLayout
@@ -89,14 +89,14 @@
                     android:gravity="center"
                     android:text="@string/number_of_steps"
                     android:textStyle="italic|bold"
-                    android:textColor="@color/black"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="18sp" />
                 <TextView
                     android:id="@+id/steps"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:textStyle="italic|bold"
-                    android:textColor="@color/black"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="18sp" />
             </LinearLayout>
 

@@ -41,11 +41,6 @@ class LiveTesting : AppCompatActivity() {
         }
 
         startPedometerButton.setOnClickListener {
-            // Print configuration before using it for live testing
-            println("=== CONFIGURATION FOR LIVE TESTING ===")
-            println(configuration.toString())
-            println("======================================")
-            
             pedometerRunningFragment = configuration?.let { PedometerRunningFragment.newInstance(it) }
 
             supportFragmentManager.beginTransaction()

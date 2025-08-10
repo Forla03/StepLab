@@ -250,14 +250,14 @@ class Calculations(
     fun computeStandardDeviation(signal: DoubleArray): Double = stddev(signal)
 
 
-    // ------------------- NEW: step counting guards -------------------
+    // ------------------- Step counting guards -------------------
 
     /**
      * Convert an autocorrelation lag into steps for a segment.
-     * - Usa steps = round(len / k).
-     * - Mai moltiplicare per 2.
-     * - Se i passi stimati eccedono del 35% quelli attesi dalla cadenza globale,
-     *   applica una correzione "harmonic": dimezza.
+     * - Uses steps = round(len / k).
+     * - Never multiply by 2.
+     * - If estimated steps exceed 35% of those expected from global cadence,
+     *   apply a "harmonic" correction: halve them.
      */
     fun stepsFromLagSafe(
         segLen: Int,
@@ -270,10 +270,10 @@ class Calculations(
 
         val f0 = f0HzGlobal
         if (f0 != null && f0.isFinite() && f0 > 0.0 && fs > 0) {
-            val expected = segLen.toDouble() / fs * f0 // passi attesi nel segmento
+            val expected = segLen.toDouble() / fs * f0 // expected steps in segment
             val maxAllowed = kotlin.math.ceil(expected * 1.35).toInt()
             if (steps > maxAllowed && steps >= 3) {
-                // tipico caso stride/step confuso -> dimezza
+                // typical stride/step confusion case -> halve
                 steps = max(1, (steps / 2.0).roundToInt())
             }
         }
@@ -292,15 +292,15 @@ class Calculations(
     ): Int {
         if (totalSteps <= 0 || fs <= 0 || !f0HzGlobal.isFinite() || f0HzGlobal <= 0.0) return max(0, totalSteps)
         val expected = activeSamples.toDouble() / fs * f0HzGlobal
-        val maxAllowed = kotlin.math.ceil(expected * 1.35).toInt() // tolleranza +35%
-        val minAllowed = kotlin.math.floor(expected * 0.65).toInt() // tolleranza -35%
+        val maxAllowed = kotlin.math.ceil(expected * 1.35).toInt() // tolerance +35%
+        val minAllowed = kotlin.math.floor(expected * 0.65).toInt() // tolerance -35%
 
         var out = totalSteps
-        // correzione dura se siamo vicini al raddoppio
+        // hard correction if we are close to doubling
         if (out > expected * 1.75) {
             out = (out / 2.0).roundToInt()
         }
-        // clamp soft nei limiti consentiti
+        // soft clamp within allowed limits
         out = out.coerceIn(minAllowed, maxAllowed).coerceAtLeast(0)
         return out
     }

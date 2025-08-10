@@ -19,7 +19,7 @@
             android:text="@string/enter_configuration"
             android:textStyle="bold"
             android:gravity="center"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:paddingTop="20dp"
             android:paddingBottom="10dp"
             android:textSize="20dp">
@@ -36,7 +36,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/sampling_rate"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:paddingLeft="20dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
@@ -120,7 +120,7 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="@string/modality"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="18dp">
         </TextView>
         <LinearLayout
@@ -161,7 +161,7 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="@string/step_recognition_algorithm"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="18dp">
         </TextView>
         <LinearLayout
@@ -207,7 +207,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/filter"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:paddingLeft="20dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
@@ -291,7 +291,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/cutoff_frequency"
-                android:textColor="@color/black"
+                android:textColor="?android:attr/textColorPrimary"
                 android:paddingLeft="20dp"
                 android:paddingTop="10dp"
                 android:paddingBottom="10dp"
@@ -367,7 +367,7 @@
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
             android:text="@string/not_real_time"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="18dp"
             android:textAlignment="center">
         </TextView>
