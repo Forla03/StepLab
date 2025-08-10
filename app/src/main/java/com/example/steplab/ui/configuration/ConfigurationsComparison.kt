@@ -163,11 +163,7 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                     // Check if autocorrelation algorithm is enabled
                     if (clonedConfig.autocorcAlg) {
-                        println("=== AUTOCORRELATION DEBUG - CONFIG $i ===")
-                        println("Starting autocorrelation processing for config: ${clonedConfig}")
                         context.processAutocorrelationAlgorithm()
-                        println("Autocorrelation finished with steps: ${context.stepsCount}")
-                        println("=== END AUTOCORRELATION DEBUG - CONFIG $i ===")
                     } else {
                         // Process all events for this configuration in background
                         val keys = jsonObject.keys()

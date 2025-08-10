@@ -47,7 +47,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:textStyle="italic|bold"
-                        android:textColor="@color/black"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:textSize="18sp" />
                     <TextView
                         android:id="@+id/steps"
@@ -55,7 +55,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center"
                         android:textStyle="italic|bold"
-                        android:textColor="@color/black"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:textSize="18sp" />
                     <TextView
                         android:id="@+id/notes"
@@ -74,7 +74,7 @@
                     android:src="@drawable/ic_select_white"
                     android:backgroundTint="@color/design_default_color_primary"
                     android:textStyle="italic|bold"
-                    android:textColor="@color/black"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:textSize="18sp" />
             </LinearLayout>
 

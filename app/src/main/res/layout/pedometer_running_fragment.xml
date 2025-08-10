@@ -38,7 +38,7 @@
             android:layout_height="match_parent"
             android:text="0"
             android:textStyle="bold"
-            android:textColor="@color/black"
+            android:textColor="?android:attr/textColorPrimary"
             android:textSize="60dp"
             android:gravity="center">
         </TextView>

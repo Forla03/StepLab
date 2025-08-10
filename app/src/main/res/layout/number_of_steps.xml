@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:text="@string/how_many_steps"
-        android:textColor="@color/black"
+        android:textColor="?android:attr/textColorPrimary"
         android:gravity="center"
         android:textSize="18dp"
         android:textStyle="bold">

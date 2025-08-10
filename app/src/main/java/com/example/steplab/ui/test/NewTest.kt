@@ -148,7 +148,7 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                         }
                     } catch (e: Exception) {
                         e.printStackTrace()
-                        Toast.makeText(this@NewTest, "Errore nel salvataggio del test", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@NewTest, "Error saving test", Toast.LENGTH_SHORT).show()
                     }
                 }
             } else {

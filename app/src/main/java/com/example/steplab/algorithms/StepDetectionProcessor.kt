@@ -4,13 +4,17 @@ import com.github.mikephil.charting.data.Entry
 import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.MathContext
-import java.text.DecimalFormat
 import java.util.*
 import kotlin.math.pow
 
 /**
- * Helper class that encapsulates step detection and sensor processing logic.
- * This class can be used by both real-time processing (PedometerRunningFragment) 
+ * Helper class that encapsulates step detection and sensor processing l              // Chart points: place a marker at each estimated step
+            // at the height of the filtered value (y[pos])           // at the height of the filtered value (y[pos])         // Chart points: place a marker at each estimated step
+            // at the height of the filtered value (y[pos])           // at the height of the filtered value (y[pos])         // Chart points: place a marker at each estimated step
+            // at the level of the filtered value (y[pos])ic.
+ * This clas             // Points for chart: place a marker at each estimated step
+            // at the level of the filtered value (y[pos])         // Chart points: put a marker at each estimated step
+            // at the height of the filtered value (filteredSignal[position])can be used by both real-time processing (PedometerRunningFragment) 
  * and batch processing (ConfigurationsComparison).
  */
 class StepDetectionProcessor(
@@ -235,16 +239,12 @@ class StepDetectionProcessor(
      * Process autocorrelation algorithm for batch processing.
      */
     fun processAutocorrelationAlgorithm(jsonObject: JSONObject) {
-        println("=== StepDetectionProcessor.processAutocorrelationAlgorithm START ===")
-        
-        // 1) Estrai e ordina i timestamp (String -> Long)
+        // 1) Extract and sort timestamps (String -> Long)
         val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
         recordList.clear()
         chartEntries.clear()
-        
-        println("Total JSON keys: ${keysSorted.size}")
 
-        // 2) Costruisci i campioni in ordine temporale
+        // 2) Build samples in temporal order
         for (key in keysSorted) {
             val eventJson = jsonObject.getJSONObject(key)
             if (eventJson.has("acceleration_x")) {
@@ -252,29 +252,23 @@ class StepDetectionProcessor(
                 val y = eventJson.getString("acceleration_y").toDouble()
                 val z = eventJson.getString("acceleration_z").toDouble()
                 val magnitude = kotlin.math.sqrt(x*x + y*y + z*z)
-                val tsMillis = key.toLong()
-                recordList.add(Sample(magnitude, tsMillis / 1000.0)) // timestamp in secondi (double)
+                val timestampMillis = key.toLong()
+                recordList.add(Sample(magnitude, timestampMillis / 1000.0)) // timestamp in seconds (double)
             }
         }
 
-        println("Extracted ${recordList.size} acceleration samples")
-        
         if (recordList.size < 4) {
-            println("ERROR: Not enough samples (${recordList.size} < 4). Setting stepsCount = 0")
             stepsCount = 0
             return
         }
 
-        // 3) Stima fs dai tempi (in secondi)
-        val firstSec = recordList.first().timestamp
-        val lastSec  = recordList.last().timestamp
-        val totalSecs = (lastSec - firstSec).coerceAtLeast(1e-6) // evita divisione per 0
-        val fsEst = (((recordList.size - 1) / totalSecs).toInt()).coerceAtLeast(10) // min 10 Hz
+        // 3) Estimate sampling frequency from timestamps (in seconds)
+        val firstSecond = recordList.first().timestamp
+        val lastSecond  = recordList.last().timestamp
+        val totalSeconds = (lastSecond - firstSecond).coerceAtLeast(1e-6) // avoid division by 0
+        val estimatedFs = (((recordList.size - 1) / totalSeconds).toInt()).coerceAtLeast(10) // min 10 Hz
 
-        println("Time range: $firstSec to $lastSec seconds (total: $totalSecs)")
-        println("Estimated sampling frequency: $fsEst Hz")
-
-        // 4) Costruisci i vettori [0,0,magnitudine] (la pipeline usa la magnitudo)
+        // 4) Build vectors [0,0,magnitude] (the pipeline uses magnitude)
         val samples = recordList.map { sample ->
             arrayOf(
                 BigDecimal.ZERO,
@@ -283,14 +277,11 @@ class StepDetectionProcessor(
             )
         }
 
-        println("Created ${samples.size} sample vectors for autocorrelation")
-
         try {
-            // 5) Conta i passi con la pipeline autocorrelazione
-            println("Calling stepDetection.countStepsAutocorrelation...")
+            // 5) Count steps with autocorrelation pipeline
             val result = stepDetection.countStepsAutocorrelation(
                 samples = samples,
-                fs = fsEst,
+                fs = estimatedFs,
                 filters = filters,
                 calculations = calculations,
                 useHannWindowForFFT = true,
@@ -298,48 +289,37 @@ class StepDetectionProcessor(
                 bpOrder = 6
             )
             stepsCount = result.steps
-            
-            println("Autocorrelation result:")
-            println("  - Steps: ${result.steps}")
-            println("  - F0: ${result.f0Hz} Hz")
-            println("  - Band: ${result.bandLowHz} - ${result.bandHighHz} Hz")
-            println("  - Segments: ${result.segments.size}")
-            println("  - Lags per segment: ${result.lagsPerSegment}")
-            println("  - Autocorr peaks: ${result.autocorrPeaks}")
 
-            // 6) (Facoltativo ma utile) Disegna la serie filtrata + marker dei passi
-            //    Filtra la magnitudo con la banda che ha usato l'algoritmo
-            val magNoDc = calculations.computeMagnitudeWithoutDC(samples)
-            val y = filters.filterMagnitudeBandPassSeries(
-                magNoDc = magNoDc,
-                fs = fsEst,
+            // 6) (Optional but useful) Draw filtered series + step markers
+            //    Filter magnitude with the band used by the algorithm
+            val magnitudeWithoutDC = calculations.computeMagnitudeWithoutDC(samples)
+            val filteredSignal = filters.filterMagnitudeBandPassSeries(
+                magNoDc = magnitudeWithoutDC,
+                fs = estimatedFs,
                 low = result.bandLowHz,
                 high = result.bandHighHz,
                 order = 6
             )
 
-            // Punti per grafico: mettiamo un marker in corrispondenza di ogni passo stimato
+            // Chart points: place a marker at each estimated step
             // all’altezza del valore filtrato (y[pos])
-            for (segIdx in result.segments.indices) {
-                val (s, e) = result.segments[segIdx]
-                val lag = result.lagsPerSegment[segIdx]
+            for (segmentIndex in result.segments.indices) {
+                val (start, end) = result.segments[segmentIndex]
+                val lag = result.lagsPerSegment[segmentIndex]
                 if (lag <= 0) continue
-                var pos = s + lag
-                while (pos <= e) {
-                    if (pos in y.indices) chartEntries.add(Entry(pos.toFloat(), y[pos].toFloat()))
-                    pos += lag
+                var position = start + lag
+                while (position <= end) {
+                    if (position in filteredSignal.indices) chartEntries.add(Entry(position.toFloat(), filteredSignal[position].toFloat()))
+                    position += lag
                 }
             }
 
         } catch (e: Exception) {
-            println("EXCEPTION in autocorrelation algorithm: ${e.message}")
             e.printStackTrace()
-            // Fallback blando
+            // Gentle fallback
             stepsCount = (recordList.size / 25).coerceAtLeast(0)
             chartEntries.clear()
         }
-        
-        println("=== StepDetectionProcessor.processAutocorrelationAlgorithm END ===")
     }
 
     private fun updateSamplingRate(timestamp: Long) {
@@ -556,7 +536,7 @@ class StepDetectionProcessor(
 
     private fun checkFalseStep() {
         if (!configuration.falseStepDetectionEnabled) return
-        if (sumResMagn.isEmpty()) return // evita /0 se capita
+        if (sumResMagn.isEmpty()) return // avoid division by zero
 
         val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
         sumResMagn.clear()
