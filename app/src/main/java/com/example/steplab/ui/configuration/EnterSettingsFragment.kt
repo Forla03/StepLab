@@ -165,19 +165,20 @@ class EnterSettingsFragment(
                 configuration.realTimeMode = 0
                 modalityNotRealTime?.isChecked = false
                 
-                // Disable and uncheck non-real-time options
+                // Disable false step detection in real-time mode
                 falseStepRadio?.isEnabled = false
                 falseStepRadio?.isChecked = false
                 falseStepRadio?.alpha = 0.5f
                 
-                timeFiltering?.isEnabled = false
-                timeFiltering?.isChecked = false
-                timeFiltering?.alpha = 0.5f
-                
+                // Disable autocorrelation in real-time mode
                 autocorrelation?.isEnabled = false
                 autocorrelation?.isChecked = false
                 autocorrelation?.alpha = 0.5f
                 configuration.autocorcAlg = false
+                
+                // Time filtering is now enabled in real-time mode
+                timeFiltering?.isEnabled = true
+                timeFiltering?.alpha = 1.0f
                 
                 enableAllOptions()
             }
@@ -194,6 +195,7 @@ class EnterSettingsFragment(
                 falseStepRadio?.isChecked = true
                 falseStepRadio?.alpha = 1.0f
                 
+                // Time filtering is enabled in both modes now
                 timeFiltering?.isEnabled = true
                 timeFiltering?.alpha = 1.0f
                 
@@ -388,15 +390,15 @@ class EnterSettingsFragment(
 
             // Apply modality-specific enable/disable logic after setting the radio buttons
             if (configuration.realTimeMode == 0) {
-                // Real-time mode - disable non-real-time options
+                // Real-time mode - disable false step and autocorrelation, but keep time filtering enabled
                 falseStepRadio?.isEnabled = false
                 falseStepRadio?.alpha = 0.5f
-                timeFiltering?.isEnabled = false
-                timeFiltering?.alpha = 0.5f
                 autocorrelation?.isEnabled = false
                 autocorrelation?.alpha = 0.5f
+                timeFiltering?.isEnabled = true
+                timeFiltering?.alpha = 1.0f
             } else {
-                // Non-real-time mode - enable non-real-time options
+                // Non-real-time mode - enable all non-real-time options
                 falseStepRadio?.isEnabled = true
                 falseStepRadio?.alpha = 1.0f
                 timeFiltering?.isEnabled = true
@@ -526,10 +528,10 @@ class EnterSettingsFragment(
                 it?.alpha = 1.0f
             }
 
-        // Time filtering is only available in non-real-time mode
+        // Time filtering is now available in both real-time and non-real-time modes
         timeFiltering?.let {
-            it.isEnabled = configuration.realTimeMode == 1
-            it.alpha = if (configuration.realTimeMode == 1) 1.0f else 0.5f
+            it.isEnabled = true
+            it.alpha = 1.0f
         }
 
         // Autocorrelation is only available in non-real-time mode and not in live testing
