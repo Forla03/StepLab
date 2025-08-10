@@ -97,27 +97,27 @@ class ConfigurationsComparison : AppCompatActivity() {
     }
 
     private fun drawBaseLine() {
-        val baseEntries = mutableListOf<Entry>()
-        val keys = jsonObject.keys()
+        val keysList = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
         var index = 0
 
-        // Create baseline dataset first
+        // Crea dataset baseline
         val baseLine = LineDataSet(null, "Magnitude of Acceleration").apply {
             color = Color.RED
             setDrawCircles(false)
             setDrawValues(false)
             lineWidth = 2f
-            setDrawIcons(true) // Enable icons for false steps
+            setDrawIcons(true)
         }
         chartData.addDataSet(baseLine)
         chart.data = chartData
 
-        // Add baseline data points
-        while (keys.hasNext()) {
-            val key = keys.next()
+        for (key in keysList) {
             val obj = jsonObject.getJSONObject(key)
             if (obj.has("acceleration_magnitude")) {
-                chartData.addEntry(Entry(index.toFloat(), obj.getString("acceleration_magnitude").toFloat()), 0)
+                chartData.addEntry(
+                    Entry(index.toFloat(), obj.getDouble("acceleration_magnitude").toFloat()),
+                    0
+                )
                 index++
             }
         }
@@ -163,7 +163,11 @@ class ConfigurationsComparison : AppCompatActivity() {
 
                     // Check if autocorrelation algorithm is enabled
                     if (clonedConfig.autocorcAlg) {
+                        println("=== AUTOCORRELATION DEBUG - CONFIG $i ===")
+                        println("Starting autocorrelation processing for config: ${clonedConfig}")
                         context.processAutocorrelationAlgorithm()
+                        println("Autocorrelation finished with steps: ${context.stepsCount}")
+                        println("=== END AUTOCORRELATION DEBUG - CONFIG $i ===")
                     } else {
                         // Process all events for this configuration in background
                         val keys = jsonObject.keys()

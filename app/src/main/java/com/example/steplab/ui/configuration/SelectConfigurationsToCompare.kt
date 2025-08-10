@@ -11,6 +11,7 @@ import com.example.steplab.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.test.SelectTest
+import java.math.BigDecimal
 
 class SelectConfigurationsToCompare : AppCompatActivity() {
 
@@ -44,7 +45,37 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
 
             if (numberOfConfigurationsSelected < 7) {
                 numberSelected.text = "($numberOfConfigurationsSelected)"
-                configurations.add(appConfiguration)
+                
+                // Print configuration before saving
+                println("=== CONFIGURATION BEFORE SAVING ===")
+                println("Configuration #$numberOfConfigurationsSelected:")
+                println(appConfiguration.toString())
+                println("===================================")
+                
+                // If autocorrelation is active, create a proper autocorrelation configuration
+                val configurationToSave = if (appConfiguration.autocorcAlg) {
+                    Configuration().apply {
+                        // Copy essential autocorrelation settings
+                        autocorcAlg = true
+                        realTimeMode = 1  // Non-real-time mode
+                        recognitionAlgorithm = -2  // Special code for autocorrelation algorithm
+                        filterType = -2  // Special code for butterworth band pass filter  
+                        samplingFrequencyIndex = appConfiguration.samplingFrequencyIndex
+                        cutoffFrequencyIndex = -1  // Not applicable for autocorrelation
+                        falseStepDetectionEnabled = false
+                        detectionThreshold = BigDecimal.ZERO
+                    }
+                } else {
+                    appConfiguration
+                }
+                
+                configurations.add(configurationToSave)
+                
+                // Print the actual saved configuration
+                println("=== CONFIGURATION ACTUALLY SAVED ===")
+                println("Saved Configuration #$numberOfConfigurationsSelected:")
+                println(configurationToSave.toString())
+                println("=====================================")
 
                 Toast.makeText(
                     this,

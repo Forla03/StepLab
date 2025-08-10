@@ -235,38 +235,111 @@ class StepDetectionProcessor(
      * Process autocorrelation algorithm for batch processing.
      */
     fun processAutocorrelationAlgorithm(jsonObject: JSONObject) {
-        val keys = jsonObject.keys()
-        recordList.clear()
+        println("=== StepDetectionProcessor.processAutocorrelationAlgorithm START ===")
         
-        while (keys.hasNext()) {
-            val key = keys.next()
+        // 1) Estrai e ordina i timestamp (String -> Long)
+        val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
+        recordList.clear()
+        chartEntries.clear()
+        
+        println("Total JSON keys: ${keysSorted.size}")
+
+        // 2) Costruisci i campioni in ordine temporale
+        for (key in keysSorted) {
             val eventJson = jsonObject.getJSONObject(key)
-            
             if (eventJson.has("acceleration_x")) {
                 val x = eventJson.getString("acceleration_x").toDouble()
                 val y = eventJson.getString("acceleration_y").toDouble()
                 val z = eventJson.getString("acceleration_z").toDouble()
-                
-                val magnitude = Math.sqrt(x * x + y * y + z * z)
-                
-                val sample = if (recordList.isEmpty()) {
-                    startingPoint = key.toLong()
-                    Sample(magnitude, key.toDouble())
-                } else {
-                    val totalDiffInMillis = key.toLong() - startingPoint
-                    val diffSeconds = DecimalFormat("#").format(totalDiffInMillis / 1000)
-                    val diffMillis = totalDiffInMillis % 1000
-                    val mill = diffMillis.toDouble() / 1000
-                    val secMilPassed = diffSeconds.toDouble() + mill
-                    Sample(magnitude, secMilPassed)
-                }
-                
-                recordList.add(sample)
+                val magnitude = kotlin.math.sqrt(x*x + y*y + z*z)
+                val tsMillis = key.toLong()
+                recordList.add(Sample(magnitude, tsMillis / 1000.0)) // timestamp in secondi (double)
             }
         }
+
+        println("Extracted ${recordList.size} acceleration samples")
         
-        // Placeholder logic - implement actual autocorrelation algorithm here
-        stepsCount = recordList.size / 10
+        if (recordList.size < 4) {
+            println("ERROR: Not enough samples (${recordList.size} < 4). Setting stepsCount = 0")
+            stepsCount = 0
+            return
+        }
+
+        // 3) Stima fs dai tempi (in secondi)
+        val firstSec = recordList.first().timestamp
+        val lastSec  = recordList.last().timestamp
+        val totalSecs = (lastSec - firstSec).coerceAtLeast(1e-6) // evita divisione per 0
+        val fsEst = (((recordList.size - 1) / totalSecs).toInt()).coerceAtLeast(10) // min 10 Hz
+
+        println("Time range: $firstSec to $lastSec seconds (total: $totalSecs)")
+        println("Estimated sampling frequency: $fsEst Hz")
+
+        // 4) Costruisci i vettori [0,0,magnitudine] (la pipeline usa la magnitudo)
+        val samples = recordList.map { sample ->
+            arrayOf(
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.valueOf(sample.magnitude)
+            )
+        }
+
+        println("Created ${samples.size} sample vectors for autocorrelation")
+
+        try {
+            // 5) Conta i passi con la pipeline autocorrelazione
+            println("Calling stepDetection.countStepsAutocorrelation...")
+            val result = stepDetection.countStepsAutocorrelation(
+                samples = samples,
+                fs = fsEst,
+                filters = filters,
+                calculations = calculations,
+                useHannWindowForFFT = true,
+                dropHeadSecondsForMSD = 0.3,
+                bpOrder = 6
+            )
+            stepsCount = result.steps
+            
+            println("Autocorrelation result:")
+            println("  - Steps: ${result.steps}")
+            println("  - F0: ${result.f0Hz} Hz")
+            println("  - Band: ${result.bandLowHz} - ${result.bandHighHz} Hz")
+            println("  - Segments: ${result.segments.size}")
+            println("  - Lags per segment: ${result.lagsPerSegment}")
+            println("  - Autocorr peaks: ${result.autocorrPeaks}")
+
+            // 6) (Facoltativo ma utile) Disegna la serie filtrata + marker dei passi
+            //    Filtra la magnitudo con la banda che ha usato l'algoritmo
+            val magNoDc = calculations.computeMagnitudeWithoutDC(samples)
+            val y = filters.filterMagnitudeBandPassSeries(
+                magNoDc = magNoDc,
+                fs = fsEst,
+                low = result.bandLowHz,
+                high = result.bandHighHz,
+                order = 6
+            )
+
+            // Punti per grafico: mettiamo un marker in corrispondenza di ogni passo stimato
+            // all’altezza del valore filtrato (y[pos])
+            for (segIdx in result.segments.indices) {
+                val (s, e) = result.segments[segIdx]
+                val lag = result.lagsPerSegment[segIdx]
+                if (lag <= 0) continue
+                var pos = s + lag
+                while (pos <= e) {
+                    if (pos in y.indices) chartEntries.add(Entry(pos.toFloat(), y[pos].toFloat()))
+                    pos += lag
+                }
+            }
+
+        } catch (e: Exception) {
+            println("EXCEPTION in autocorrelation algorithm: ${e.message}")
+            e.printStackTrace()
+            // Fallback blando
+            stepsCount = (recordList.size / 25).coerceAtLeast(0)
+            chartEntries.clear()
+        }
+        
+        println("=== StepDetectionProcessor.processAutocorrelationAlgorithm END ===")
     }
 
     private fun updateSamplingRate(timestamp: Long) {
@@ -482,23 +555,24 @@ class StepDetectionProcessor(
     }
 
     private fun checkFalseStep() {
-        if (configuration.falseStepDetectionEnabled) {
-            val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
-            sumResMagn.clear()
+        if (!configuration.falseStepDetectionEnabled) return
+        if (sumResMagn.isEmpty()) return // evita /0 se capita
 
-            if (countFour < 4) {
-                resLast4Steps.add(averageRes)
-                countFour++
-            } else {
-                falseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
-                resLast4Steps.removeAt(0)
-                resLast4Steps.add(averageRes)
-                countFour = 0
-            }
-            resultMagnPrev = averageRes
+        val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
+        sumResMagn.clear()
+
+        if (resLast4Steps.size < 4) {
+            resLast4Steps.add(averageRes)
+            return
         }
+
+        falseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
+
+        resLast4Steps.removeAt(0)
+        resLast4Steps.add(averageRes)
     }
-    
+
+
     private fun checkTimeFilteringFalseStep() {
         if (configuration.recognitionAlgorithm == 2) {
             val aNPeakValley = configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime
@@ -510,28 +584,29 @@ class StepDetectionProcessor(
     }
 
     private fun checkButterworthFalseStep() {
-        if (configuration.filterType == 4 && configuration.falseStepDetectionEnabled) {
-            val magnNPeakValley = configuration.lastLocalMaxAccel.toDouble() -
-                    configuration.lastLocalMinAccel.toDouble()
+        if (configuration.filterType != 4 || !configuration.falseStepDetectionEnabled) return
 
-            if (oldMagn != 0.0) {
-                val diffMagn = kotlin.math.abs(magnNPeakValley - oldMagn)
-                val timeDiff = kotlin.math.abs(
-                    (configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime).toDouble() -
-                            (configuration.exMax!! - configuration.exMin!!).toDouble()
-                )
+        val magnN = configuration.lastLocalMaxAccel.toDouble() - configuration.lastLocalMinAccel.toDouble()
+        if (oldMagn != 0.0) {
+            val diffMagn = kotlin.math.abs(magnN - oldMagn)
+            val eps = 1e-6
+            val fi2 = if (diffMagn > eps) kotlin.math.abs(kotlin.math.ceil(samplingRateValue / diffMagn * 2.0)) else Double.POSITIVE_INFINITY
+            val timeDiff = kotlin.math.abs(
+                (configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime).toDouble() -
+                        (configuration.exMax!! - configuration.exMin!!).toDouble()
+            )
 
-                if (!falseStep && diffMagn < 0.4 && timeDiff < 1.8) {
-                    falseStep = true
-                }
-
-                val base = samplingRateValue / 6.0
-                val adjustment = if (diffMagn < 0.8) 0.5 else 1.0
-                cutoffSelected = (base * adjustment).coerceIn(1.5, 10.0)
+            if (!falseStep && fi2 > 180.0 && timeDiff < 2.1) {
+                falseStep = true
             }
 
-            oldMagn = magnNPeakValley
+            cutoffSelected = when {
+                fi2 < 81.0  -> (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it }
+                fi2 < 183.0 -> (samplingRateValue / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it } // ~/20
+                else        -> 0.0
+            }
         }
+        oldMagn = magnN
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {

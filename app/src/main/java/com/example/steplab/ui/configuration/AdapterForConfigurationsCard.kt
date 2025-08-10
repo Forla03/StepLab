@@ -67,6 +67,7 @@ class AdapterForConfigurationsCard(
             0 -> context.getString(R.string.peak)
             1 -> context.getString(R.string.intersection)
             2 -> context.getString(R.string.timeFiltering)
+            -2 -> "Autocorrelation Algorithm"  // Special case for autocorrelation
             else -> ""
         }
 
@@ -99,6 +100,10 @@ class AdapterForConfigurationsCard(
                 holder.filter.text = context.getString(R.string.filter_italic) + context.getString(R.string.butterworth_filter)
                 holder.frequency.visibility = View.VISIBLE
                 holder.frequency.text = context.getString(R.string.cutoff_frequency_italic) + context.getString(R.string.dynamic_frequency)
+            }
+            -2 -> {
+                holder.filter.text = context.getString(R.string.filter_italic) + "Butterworth Band Pass Filter"  // Special case for autocorrelation
+                holder.frequency.visibility = View.GONE
             }
         }
 
