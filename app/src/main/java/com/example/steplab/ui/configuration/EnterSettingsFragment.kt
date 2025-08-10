@@ -17,12 +17,11 @@ class EnterSettingsFragment(
     private val isLiveTesting: Boolean = false
 ) : Fragment() {
 
-    // Alternative constructors for Java compatibility
     constructor() : this(Configuration(), true, false)
-    
-    constructor(configuration: Configuration) : this(configuration, true, true) // Live testing by default
+    constructor(configuration: Configuration) : this(configuration, true, true)
 
     private var first = true
+    private var suppressCallbacks = false // guard to avoid listener loops
 
     private var scrollView: ScrollView? = null
     private var samplingTwenty: RadioButton? = null
@@ -108,41 +107,52 @@ class EnterSettingsFragment(
         // Disable autocorrelation in live testing mode
         if (isLiveTesting) {
             autocorrelation?.isEnabled = false
-            autocorrelation?.alpha = 0.5f // Make it visually disabled
+            autocorrelation?.alpha = 0.5f
         }
 
         setupListeners()
-        applyDefaultSelection()
+
+        // Apply defaults only on first creation and only if autocorr is NOT active
+        if (savedInstanceState == null && !configuration.autocorcAlg) {
+            applyDefaultSelection()
+        } else {
+            syncUiFromConfiguration()
+        }
 
         return root
     }
 
     private fun setupListeners() {
         samplingTwenty?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.samplingFrequencyIndex = 0
                 uncheckAllSamplingExcept(samplingTwenty)
             }
         }
         samplingForty?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.samplingFrequencyIndex = 1
                 uncheckAllSamplingExcept(samplingForty)
             }
         }
         samplingFifty?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.samplingFrequencyIndex = 2
                 uncheckAllSamplingExcept(samplingFifty)
             }
         }
         samplingHundred?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.samplingFrequencyIndex = 3
                 uncheckAllSamplingExcept(samplingHundred)
             }
         }
         samplingMax?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.samplingFrequencyIndex = 4
                 uncheckAllSamplingExcept(samplingMax)
@@ -150,6 +160,7 @@ class EnterSettingsFragment(
         }
 
         modalityRealTime?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.realTimeMode = 0
                 modalityNotRealTime?.isChecked = false
@@ -157,20 +168,33 @@ class EnterSettingsFragment(
                 falseStepRadio?.isChecked = false
                 autocorrelation?.isEnabled = false
                 autocorrelation?.isChecked = false
+                configuration.autocorcAlg = false
+                enableAllOptions()
             }
         }
 
         modalityNotRealTime?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.realTimeMode = 1
                 modalityRealTime?.isChecked = false
                 falseStepRadio?.isEnabled = true
                 falseStepRadio?.isChecked = true
                 autocorrelation?.isEnabled = true
+                if (autocorrelation?.isChecked != true) {
+                    enableAllOptions()
+                }
+
+                println("=== NON-REAL-TIME MODE SELECTED ===")
+                println("realTimeMode: ${configuration.realTimeMode}")
+                println("autocorrelation enabled: ${autocorrelation?.isEnabled}")
+                println("autocorrelation checked: ${autocorrelation?.isChecked}")
+                println("===================================")
             }
         }
 
         recognitionPeak?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.recognitionAlgorithm = 0
                 recognitionIntersection?.isChecked = false
@@ -179,6 +203,7 @@ class EnterSettingsFragment(
         }
 
         recognitionIntersection?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.recognitionAlgorithm = 1
                 recognitionPeak?.isChecked = false
@@ -187,6 +212,7 @@ class EnterSettingsFragment(
         }
 
         timeFiltering?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.recognitionAlgorithm = 2
                 recognitionPeak?.isChecked = false
@@ -195,6 +221,7 @@ class EnterSettingsFragment(
         }
 
         filterBagilevi?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 0
                 hideCutoffFrequency()
@@ -203,6 +230,7 @@ class EnterSettingsFragment(
         }
 
         filterLowPass?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 1
                 configuration.detectionThreshold = BigDecimal.valueOf(5)
@@ -213,6 +241,7 @@ class EnterSettingsFragment(
         }
 
         noFilter?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 2
                 configuration.detectionThreshold = BigDecimal.valueOf(5)
@@ -222,6 +251,7 @@ class EnterSettingsFragment(
         }
 
         filterRotation?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 3
                 configuration.detectionThreshold = BigDecimal.valueOf(8)
@@ -231,49 +261,148 @@ class EnterSettingsFragment(
         }
 
         butterworthFilter?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 4
                 hideCutoffFrequency()
                 uncheckAllFiltersExceptKeepingFalseStep(butterworthFilter)
-                // Remove forced deactivation of Peak algorithm - Butterworth can work with all algorithms
             }
         }
 
         falseStepRadio?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
-                // False step detection can work with any filter, set it as a flag instead
                 configuration.falseStepDetectionEnabled = true
-                configuration.realTimeMode = 1 // Enable non-real-time mode for false step detection
+                configuration.realTimeMode = 1
                 autocorrelation?.isChecked = false
-                // Allow user to choose filter type independently
-                // Remove forced deactivation of Peak algorithm
             } else {
                 configuration.falseStepDetectionEnabled = false
             }
         }
 
         autocorrelation?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.autocorcAlg = true
-                falseStepRadio?.isChecked = false
+                configuration.realTimeMode = 1
+                configuration.recognitionAlgorithm = -1
+                configuration.filterType = -1
+                configuration.falseStepDetectionEnabled = false
+                configuration.cutoffFrequencyIndex = -1
+
+                suppressCallbacks = true
+                try {
+                    modalityNotRealTime?.isChecked = true
+                    modalityRealTime?.isChecked = false
+                } finally {
+                    suppressCallbacks = false
+                }
+
+                disableAllOtherOptionsForAutocorrelation()
                 hideCutoffFrequency()
                 layoutSamplingRate?.visibility = View.GONE
-                uncheckAllFiltersExcept(autocorrelation) // Keep original behavior for autocorrelation
-                // Allow autocorrelation to work with different recognition algorithms
+
+                println("=== AUTOCORRELATION CONFIGURATION ===")
+                println("autocorcAlg: ${configuration.autocorcAlg}")
+                println("realTimeMode: ${configuration.realTimeMode} (forced to non-real-time)")
+                println("recognitionAlgorithm: ${configuration.recognitionAlgorithm} (disabled for autocorrelation)")
+                println("filterType: ${configuration.filterType} (disabled for autocorrelation)")
+                println("falseStepDetectionEnabled: ${configuration.falseStepDetectionEnabled}")
+                println("samplingFrequencyIndex: ${configuration.samplingFrequencyIndex}")
+                println("cutoffFrequencyIndex: ${configuration.cutoffFrequencyIndex} (disabled for autocorrelation)")
+                println("detectionThreshold: ${configuration.detectionThreshold}")
+                println("===================================")
+            } else {
+                configuration.autocorcAlg = false
+                enableAllOptions()
+                if (showSamplingRate) layoutSamplingRate?.visibility = View.VISIBLE
+                // Do not reset to defaults here; let the user pick or keep current config
+                syncUiFromConfiguration()
+                println("=== AUTOCORRELATION DISABLED ===")
+                println("autocorcAlg: ${configuration.autocorcAlg}")
+                println("================================")
             }
         }
 
         cutoffTwo?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) setCutoff(0)
         }
         cutoffThree?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) setCutoff(1)
         }
         cutoffTen?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) setCutoff(2)
         }
         cutoffDividedFifty?.setOnCheckedChangeListener { _, isChecked ->
+            if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) setCutoff(3)
+        }
+    }
+
+    private fun syncUiFromConfiguration() {
+        // Reflect current configuration into UI without triggering listeners
+        suppressCallbacks = true
+        try {
+            // Sampling
+            when (configuration.samplingFrequencyIndex) {
+                0 -> samplingTwenty?.isChecked = true
+                1 -> samplingForty?.isChecked = true
+                2 -> samplingFifty?.isChecked = true
+                3 -> samplingHundred?.isChecked = true
+                4 -> samplingMax?.isChecked = true
+            }
+
+            // Modality
+            if (configuration.realTimeMode == 0) {
+                modalityRealTime?.isChecked = true
+            } else {
+                modalityNotRealTime?.isChecked = true
+            }
+
+            if (configuration.autocorcAlg) {
+                autocorrelation?.isChecked = true
+                disableAllOtherOptionsForAutocorrelation()
+                hideCutoffFrequency()
+                layoutSamplingRate?.visibility = View.GONE
+                return
+            } else {
+                autocorrelation?.isChecked = false
+                enableAllOptions()
+                if (showSamplingRate) layoutSamplingRate?.visibility = View.VISIBLE
+            }
+
+            // Recognition
+            when (configuration.recognitionAlgorithm) {
+                0 -> recognitionPeak?.isChecked = true
+                1 -> recognitionIntersection?.isChecked = true
+                2 -> timeFiltering?.isChecked = true
+            }
+
+            // Filters
+            when (configuration.filterType) {
+                0 -> { filterBagilevi?.isChecked = true; hideCutoffFrequency() }
+                1 -> { filterLowPass?.isChecked = true; showCutoffFrequency() }
+                2 -> { noFilter?.isChecked = true; hideCutoffFrequency() }
+                3 -> { filterRotation?.isChecked = true; hideCutoffFrequency() }
+                4 -> { butterworthFilter?.isChecked = true; hideCutoffFrequency() }
+            }
+
+            // Cutoff
+            when (configuration.cutoffFrequencyIndex) {
+                0 -> cutoffTwo?.isChecked = true
+                1 -> cutoffThree?.isChecked = true
+                2 -> cutoffTen?.isChecked = true
+                3 -> cutoffDividedFifty?.isChecked = true
+            }
+
+            // False step
+            falseStepRadio?.isChecked = configuration.falseStepDetectionEnabled
+
+        } finally {
+            suppressCallbacks = false
         }
     }
 
@@ -296,12 +425,94 @@ class EnterSettingsFragment(
             filterBagilevi, filterLowPass, noFilter, filterRotation,
             butterworthFilter, autocorrelation
         ).filter { it != checked }.forEach { it?.isChecked = false }
-        
-        // Keep falseStepRadio checked if we're in non-real-time mode and it was checked
+
         if (shouldKeepFalseStep && checked != falseStepRadio) {
-            // Don't uncheck falseStepRadio in non-real-time mode
+            // keep false step checked in non real-time
         } else if (checked != falseStepRadio) {
             falseStepRadio?.isChecked = false
+        }
+    }
+
+    private fun disableAllOtherOptionsForAutocorrelation() {
+        // Force non-real-time modality disabled state
+        modalityRealTime?.let {
+            it.isEnabled = false
+            it.alpha = 0.5f
+        }
+
+        // Disable filters and false-step
+        listOf(filterBagilevi, filterLowPass, noFilter, filterRotation, butterworthFilter, falseStepRadio)
+            .forEach {
+                it?.isChecked = false
+                it?.isEnabled = false
+                it?.alpha = 0.5f
+            }
+
+        // Disable recognition algos
+        listOf(recognitionPeak, recognitionIntersection, timeFiltering)
+            .forEach {
+                it?.isChecked = false
+                it?.isEnabled = false
+                it?.alpha = 0.5f
+            }
+
+        // Disable cutoff
+        listOf(cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty)
+            .forEach {
+                it?.isChecked = false
+                it?.isEnabled = false
+                it?.alpha = 0.5f
+            }
+
+        // Disable sampling radios
+        listOf(samplingTwenty, samplingForty, samplingFifty, samplingHundred, samplingMax)
+            .forEach {
+                it?.isEnabled = false
+                it?.alpha = 0.5f
+            }
+    }
+
+    private fun enableAllOptions() {
+        modalityRealTime?.let {
+            it.isEnabled = true
+            it.alpha = 1.0f
+        }
+        modalityNotRealTime?.let {
+            it.isEnabled = true
+            it.alpha = 1.0f
+        }
+
+        listOf(filterBagilevi, filterLowPass, noFilter, filterRotation, butterworthFilter)
+            .forEach {
+                it?.isEnabled = true
+                it?.alpha = 1.0f
+            }
+
+        falseStepRadio?.let { radio ->
+            radio.isEnabled = configuration.realTimeMode == 1
+            radio.alpha = if (configuration.realTimeMode == 1) 1.0f else 0.5f
+        }
+
+        listOf(recognitionPeak, recognitionIntersection, timeFiltering)
+            .forEach {
+                it?.isEnabled = true
+                it?.alpha = 1.0f
+            }
+
+        listOf(cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty)
+            .forEach {
+                it?.isEnabled = true
+                it?.alpha = 1.0f
+            }
+
+        listOf(samplingTwenty, samplingForty, samplingFifty, samplingHundred, samplingMax)
+            .forEach {
+                it?.isEnabled = true
+                it?.alpha = 1.0f
+            }
+
+        if (showSamplingRate) {
+            layoutSamplingRate?.visibility = View.VISIBLE
         }
     }
 
@@ -321,11 +532,40 @@ class EnterSettingsFragment(
     }
 
     private fun applyDefaultSelection() {
-        samplingMax?.isChecked = true
-        modalityRealTime?.isChecked = true
-        recognitionIntersection?.isChecked = true
-        filterLowPass?.isChecked = true
-        cutoffDividedFifty?.isChecked = true
+        // default UI selection
+        suppressCallbacks = true
+        try {
+            samplingMax?.isChecked = true
+            modalityRealTime?.isChecked = true
+            recognitionIntersection?.isChecked = true
+            filterLowPass?.isChecked = true
+            cutoffDividedFifty?.isChecked = true
+        } finally {
+            suppressCallbacks = false
+        }
+
+        // default configuration values
+        applyDefaultConfigurationValues()
+
+        println("=== DEFAULT CONFIGURATION APPLIED ===")
+        println("samplingFrequencyIndex: ${configuration.samplingFrequencyIndex}")
+        println("realTimeMode: ${configuration.realTimeMode}")
+        println("recognitionAlgorithm: ${configuration.recognitionAlgorithm}")
+        println("filterType: ${configuration.filterType}")
+        println("cutoffFrequencyIndex: ${configuration.cutoffFrequencyIndex}")
+        println("autocorcAlg: ${configuration.autocorcAlg}")
+        println("falseStepDetectionEnabled: ${configuration.falseStepDetectionEnabled}")
+        println("=====================================")
+    }
+
+    private fun applyDefaultConfigurationValues() {
+        configuration.samplingFrequencyIndex = 4  // max sampling
+        configuration.realTimeMode = 0           // real-time
+        configuration.recognitionAlgorithm = 1   // intersection
+        configuration.filterType = 1             // low pass
+        configuration.cutoffFrequencyIndex = 3   // divided fifty
+        configuration.falseStepDetectionEnabled = false
+        configuration.autocorcAlg = false
     }
 
     fun disableAllViews() {
@@ -337,8 +577,15 @@ class EnterSettingsFragment(
             recognitionPeak, recognitionIntersection,
             filterBagilevi, filterLowPass, noFilter, filterRotation,
             cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty,
-            cutoffFrequencyLayout, layoutSamplingRate, textSamplingRate, firstView,
             butterworthFilter, falseStepRadio, timeFiltering, autocorrelation
-        ).forEach { it?.isEnabled = false }
+        ).forEach {
+            it?.isEnabled = false
+            it?.alpha = 0.5f
+        }
+
+        cutoffFrequencyLayout?.isEnabled = false
+        layoutSamplingRate?.isEnabled = false
+        textSamplingRate?.isEnabled = false
+        firstView?.isEnabled = false
     }
 }
