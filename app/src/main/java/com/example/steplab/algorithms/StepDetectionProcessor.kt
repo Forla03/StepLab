@@ -6,15 +6,14 @@ import java.math.BigDecimal
 import java.math.MathContext
 import java.util.*
 import kotlin.math.pow
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.sqrt
 
 /**
- * Helper class that encapsulates step detection and sensor processing l              // Chart points: place a marker at each estimated step
-            // at the height of the filtered value (y[pos])           // at the height of the filtered value (y[pos])         // Chart points: place a marker at each estimated step
-            // at the height of the filtered value (y[pos])           // at the height of the filtered value (y[pos])         // Chart points: place a marker at each estimated step
-            // at the level of the filtered value (y[pos])ic.
- * This clas             // Points for chart: place a marker at each estimated step
-            // at the level of the filtered value (y[pos])         // Chart points: put a marker at each estimated step
-            // at the height of the filtered value (filteredSignal[position])can be used by both real-time processing (PedometerRunningFragment) 
+ * Helper class that encapsulates step detection and sensor processing.
+ * This class can be used by both real-time processing (PedometerRunningFragment)
  * and batch processing (ConfigurationsComparison).
  */
 class StepDetectionProcessor(
@@ -33,8 +32,7 @@ class StepDetectionProcessor(
     // State variables
     var stepDetected = false
         private set
-    var accelerometerEvent = false
-        // Made public for PedometerRunningFragment chart updates
+    var accelerometerEvent = false // Made public for PedometerRunningFragment chart updates
     private var firstSignal = true
     var lastAccelerationMagnitude: BigDecimal? = null
         private set
@@ -50,16 +48,16 @@ class StepDetectionProcessor(
     var alpha: BigDecimal? = null
         private set
     private var date: Calendar? = null
-    
+
     // Counters
     var stepsCount = 0
         private set
     var counter = 0
         private set
-    
+
     // Chart entries for batch processing
     val chartEntries = mutableListOf<Entry>()
-    
+
     // False step detection variables
     private val vectorMagn = FloatArray(3)
     private var resultMagn = 0f
@@ -68,7 +66,7 @@ class StepDetectionProcessor(
     private var countFour = 0
     private val resLast4Steps = mutableListOf<Float>()
     private var falseStep = false
-    
+
     // For time filtering algorithm
     private val last3Acc = mutableListOf<BigDecimal>()
     private var s = 0
@@ -76,7 +74,7 @@ class StepDetectionProcessor(
     var cutoffSelected = 3.0 // Default cutoff frequency for Butterworth filter
         private set
     private var oldMagn = 0.0
-    
+
     // For autocorrelation algorithm
     private val recordList = mutableListOf<Sample>()
     private var startingPoint = 0L
@@ -94,7 +92,7 @@ class StepDetectionProcessor(
         configuration.lastDetectedStepTime = 0L
         configuration.lastStepSecondPhaseTime = 0L
         val cutoffFrequencyIndex = configuration.cutoffFrequencyIndex
-        
+
         if (cutoffFrequencyIndex == 3) {
             alpha = BigDecimal("0.1")
         } else {
@@ -120,7 +118,7 @@ class StepDetectionProcessor(
         timestamp: Long
     ): ProcessingResult {
         stepDetected = false
-        
+
         when (sensorType) {
             android.hardware.Sensor.TYPE_ACCELEROMETER -> {
                 accelerometerEvent = true
@@ -128,15 +126,15 @@ class StepDetectionProcessor(
                 reusableValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                
+
                 accelerometer.rawValues = reusableValues
                 accelerometerXAxis.rawValues = reusableValues
                 lastAccelerationMagnitude = calculations.resultant(reusableValues)
-                
+
                 // Update sampling rate dynamically
                 updateSamplingRate(timestamp)
             }
-            
+
             android.hardware.Sensor.TYPE_MAGNETIC_FIELD -> {
                 accelerometerEvent = false
                 reusableMagnetometerValues[0] = BigDecimal.valueOf(values[0].toDouble())
@@ -144,7 +142,7 @@ class StepDetectionProcessor(
                 reusableMagnetometerValues[2] = BigDecimal.valueOf(values[2].toDouble())
                 magnetometer.rawValues = reusableMagnetometerValues
             }
-            
+
             android.hardware.Sensor.TYPE_GRAVITY -> {
                 accelerometerEvent = false
                 reusableGravityValues[0] = BigDecimal.valueOf(values[0].toDouble())
@@ -198,11 +196,13 @@ class StepDetectionProcessor(
 
             } else if (eventJson.has("gravity_x")) {
                 accelerometerEvent = false
-                configuration.gravity = calculations.resultant(arrayOf(
-                    BigDecimal(eventJson.getString("gravity_x")),
-                    BigDecimal(eventJson.getString("gravity_y")),
-                    BigDecimal(eventJson.getString("gravity_z"))
-                ))
+                configuration.gravity = calculations.resultant(
+                    arrayOf(
+                        BigDecimal(eventJson.getString("gravity_x")),
+                        BigDecimal(eventJson.getString("gravity_y")),
+                        BigDecimal(eventJson.getString("gravity_z"))
+                    )
+                )
             } else if (eventJson.has("rotation_x")) {
                 accelerometerEvent = false
                 rotation.rawValues = arrayOf(
@@ -231,12 +231,13 @@ class StepDetectionProcessor(
                 sumResMagn.add(resultMagn)
             }
         }
-        
+
         return stepDetected
     }
 
     /**
      * Process autocorrelation algorithm for batch processing.
+     * NOTE: draws step markers aligned to the baseline (original indices).
      */
     fun processAutocorrelationAlgorithm(jsonObject: JSONObject) {
         // 1) Extract and sort timestamps (String -> Long)
@@ -244,14 +245,14 @@ class StepDetectionProcessor(
         recordList.clear()
         chartEntries.clear()
 
-        // 2) Build samples in temporal order
+        // 2) Build samples in temporal order (keep original sampling domain)
         for (key in keysSorted) {
             val eventJson = jsonObject.getJSONObject(key)
             if (eventJson.has("acceleration_x")) {
                 val x = eventJson.getString("acceleration_x").toDouble()
                 val y = eventJson.getString("acceleration_y").toDouble()
                 val z = eventJson.getString("acceleration_z").toDouble()
-                val magnitude = kotlin.math.sqrt(x*x + y*y + z*z)
+                val magnitude = sqrt(x * x + y * y + z * z)
                 val timestampMillis = key.toLong()
                 recordList.add(Sample(magnitude, timestampMillis / 1000.0)) // timestamp in seconds (double)
             }
@@ -264,17 +265,13 @@ class StepDetectionProcessor(
 
         // 3) Estimate sampling frequency from timestamps (in seconds)
         val firstSecond = recordList.first().timestamp
-        val lastSecond  = recordList.last().timestamp
+        val lastSecond = recordList.last().timestamp
         val totalSeconds = (lastSecond - firstSecond).coerceAtLeast(1e-6) // avoid division by 0
         val estimatedFs = (((recordList.size - 1) / totalSeconds).toInt()).coerceAtLeast(10) // min 10 Hz
 
         // 4) Build vectors [0,0,magnitude] (the pipeline uses magnitude)
         val samples = recordList.map { sample ->
-            arrayOf(
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                BigDecimal.valueOf(sample.magnitude)
-            )
+            arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.valueOf(sample.magnitude))
         }
 
         try {
@@ -290,8 +287,7 @@ class StepDetectionProcessor(
             )
             stepsCount = result.steps
 
-            // 6) (Optional but useful) Draw filtered series + step markers
-            //    Filter magnitude with the band used by the algorithm
+            // 6) Filter magnitude with the band used by the algorithm (original domain)
             val magnitudeWithoutDC = calculations.computeMagnitudeWithoutDC(samples)
             val filteredSignal = filters.filterMagnitudeBandPassSeries(
                 magNoDc = magnitudeWithoutDC,
@@ -301,15 +297,33 @@ class StepDetectionProcessor(
                 order = 6
             )
 
-            // Chart points: place a marker at each estimated step
-            // all’altezza del valore filtrato (y[pos])
+            // 7) MAP ACF domain -> ORIGINAL domain for chart markers
+            //    Use the SAME decimation rule used inside the ACF pipeline to stay aligned.
+            val decimationFactor = if (estimatedFs > 120)
+                max(2, floor(estimatedFs.toDouble() / 50.0).toInt())
+            else 1
+            val fsUsed = estimatedFs.toDouble() / decimationFactor.toDouble()
+
+            // If the ACF pipeline discards head samples for MSD (e.g., 0.3 s), reflect that as an offset.
+            val headDropSeconds = 0.3
+            val headDropUsed = (headDropSeconds * fsUsed).toInt()
+            val offsetOriginal = headDropUsed * decimationFactor
+
+            // Place a marker (in ORIGINAL sample index) at each estimated step
             for (segmentIndex in result.segments.indices) {
-                val (start, end) = result.segments[segmentIndex]
-                val lag = result.lagsPerSegment[segmentIndex]
+                val (start, end) = result.segments[segmentIndex]    // indices in ACF/decimated domain
+                val lag = result.lagsPerSegment[segmentIndex]       // lag in ACF/decimated domain
                 if (lag <= 0) continue
+
                 var position = start + lag
                 while (position <= end) {
-                    if (position in filteredSignal.indices) chartEntries.add(Entry(position.toFloat(), filteredSignal[position].toFloat()))
+                    val originalIndex = offsetOriginal + position * decimationFactor
+                    if (originalIndex in filteredSignal.indices) {
+                        // Y from filtered original-domain series (same scale as red baseline)
+                        chartEntries.add(
+                            Entry(originalIndex.toFloat(), filteredSignal[originalIndex].toFloat())
+                        )
+                    }
                     position += lag
                 }
             }
@@ -326,12 +340,12 @@ class StepDetectionProcessor(
         val calendar = Calendar.getInstance()
         calendar.timeInMillis = timestamp
         val second = calendar.get(Calendar.SECOND)
-        
+
         if (firstSecond == null) {
             firstSecond = second
             currentSecond = second
         }
-        
+
         if (second == firstSecond) {
             signalCount++
         } else if (second == currentSecond) {
@@ -340,7 +354,7 @@ class StepDetectionProcessor(
             currentSecond = second
             samplingRateValue = signalCount
             signalCount = 0
-            
+
             // Recalculate alpha for low-pass filter
             if (configuration.filterType == 1 && configuration.cutoffFrequencyIndex != 3) {
                 alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
@@ -375,9 +389,9 @@ class StepDetectionProcessor(
                 val second = date!!.get(Calendar.SECOND)
 
                 if (firstSignal) {
+                    firstSignal = false
                     firstSecond = second
                     currentSecond = second
-                    firstSignal = false
                 }
 
                 if (second == firstSecond) {
@@ -446,9 +460,9 @@ class StepDetectionProcessor(
             val second = date!!.get(Calendar.SECOND)
 
             if (firstSignal) {
+                firstSignal = false
                 firstSecond = second
                 currentSecond = second
-                firstSignal = false
             }
 
             if (second == firstSecond) {
@@ -461,7 +475,7 @@ class StepDetectionProcessor(
                 samplingRateValue = signalCount
                 signalCount = 0
             }
-            
+
             // Calculate magnetometer magnitude for false step detection
             if (configuration.falseStepDetectionEnabled) {
                 calculateMagnetometerMagnitude()
@@ -502,8 +516,8 @@ class StepDetectionProcessor(
         vectorMagn[0] = magn[0].toFloat()
         vectorMagn[1] = magn[1].toFloat()
         vectorMagn[2] = magn[2].toFloat()
-        resultMagn = kotlin.math.sqrt(
-            kotlin.math.sqrt(vectorMagn[0] * vectorMagn[0] + vectorMagn[1] * vectorMagn[1]).pow(2) + vectorMagn[2] * vectorMagn[2]
+        resultMagn = sqrt(
+            sqrt(vectorMagn[0] * vectorMagn[0] + vectorMagn[1] * vectorMagn[1]).pow(2) + vectorMagn[2] * vectorMagn[2]
         )
     }
 
@@ -512,20 +526,20 @@ class StepDetectionProcessor(
         if (configuration.recognitionAlgorithm == 2) {
             checkTimeFilteringFalseStep()
         }
-        
+
         // Check for false steps based on Butterworth filter
         if (configuration.filterType == 4 && configuration.falseStepDetectionEnabled) {
             checkButterworthFalseStep()
         }
-        
+
         // Check for false steps based on magnetometer data
         if (configuration.falseStepDetectionEnabled) {
             checkFalseStep()
         }
-        
+
         if (!falseStep) {
             stepsCount++
-            // Store chart entry for batch processing
+            // Store chart entry for batch processing (index domain)
             lastAccelerationMagnitude?.let { magnitude ->
                 chartEntries.add(Entry(counter.toFloat(), magnitude.toFloat()))
             }
@@ -551,7 +565,6 @@ class StepDetectionProcessor(
         resLast4Steps.removeAt(0)
         resLast4Steps.add(averageRes)
     }
-
 
     private fun checkTimeFilteringFalseStep() {
         if (configuration.recognitionAlgorithm == 2) {
@@ -581,9 +594,9 @@ class StepDetectionProcessor(
             }
 
             cutoffSelected = when {
-                fi2 < 81.0  -> (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it }
+                fi2 < 81.0 -> (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it }
                 fi2 < 183.0 -> (samplingRateValue / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it } // ~/20
-                else        -> 0.0
+                else -> 0.0
             }
         }
         oldMagn = magnN
