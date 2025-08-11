@@ -21,11 +21,11 @@ class StepDetection(
 
     /**
      * Step counting via autocorrelation (paper pipeline) + robust fixes.
-     * - decimazione (se fs alto) verso ~50–60 Hz
-     * - filtro band-pass
-     * - ACF normalizzata (biased)
-     * - k stimato su finestre ma usato per l’intero segmento (no doppio conteggio)
-     * - clamp dei passi del segmento e del totale alla cadenza attesa
+     * - decimation (if fs is high) to ~50–60 Hz
+     * - band-pass filter
+     * - normalized ACF (biased)
+     * - k estimated on windows but used for the whole segment (no double counting)
+     * - clamp of the segment's steps and of the total to the expected cadence
      */
     fun countStepsAutocorrelation(
         samples: List<Array<BigDecimal>>,

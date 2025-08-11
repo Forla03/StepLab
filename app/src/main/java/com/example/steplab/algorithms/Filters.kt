@@ -58,32 +58,34 @@ class Filters(
      * Per-axis low-pass with persistent state.
      */
     fun butterworthFilter(
-        vettore3Componenti: Array<BigDecimal>,
-        taglio: Double,
-        frequenzaCampionamentoValue: Int
+        threeAxisVector: Array<BigDecimal>,
+        cutoff: Double,
+        samplingRate: Int
     ): Array<BigDecimal> {
         val output = Array(3) { BigDecimal.ZERO }
-        if (!butterworthInitialized || taglio != lastCutoff || frequenzaCampionamentoValue != lastSamplingRate) {
-            initializeButterworthFilters(taglio, frequenzaCampionamentoValue)
+
+        if (!butterworthInitialized || cutoff != lastCutoff || samplingRate != lastSamplingRate) {
+            initializeButterworthFilters(cutoff, samplingRate)
             butterworthInitialized = true
-            lastCutoff = taglio
-            lastSamplingRate = frequenzaCampionamentoValue
+            lastCutoff = cutoff
+            lastSamplingRate = samplingRate
         }
-        for (i in 0..2) {
-            val filteredValue = butterworthFilters[i].filter(vettore3Componenti[i].toDouble())
+
+        for (i in 0 until 3) {
+            val filteredValue = butterworthFilters[i].filter(threeAxisVector[i].toDouble())
             output[i] = BigDecimal.valueOf(filteredValue)
             filteredComponents[i] = output[i]
         }
         return output
     }
 
-    private fun initializeButterworthFilters(taglio: Double, frequenzaCampionamentoValue: Int) {
-        val sampleRate = frequenzaCampionamentoValue.toDouble()
+    private fun initializeButterworthFilters(cutoffInput: Double, samplingFreqValue: Int) {
+        val sampleRate = samplingFreqValue.toDouble()
         val nyq = sampleRate / 2.0
         val cutoff = when {
-            taglio <= 0 -> 1.0
-            taglio >= nyq -> nyq * 0.9
-            else -> taglio
+            cutoffInput <= 0 -> 1.0
+            cutoffInput >= nyq -> nyq * 0.9
+            else -> cutoffInput
         }
         for (i in 0..2) {
             butterworthFilters[i].lowPass(
@@ -94,57 +96,7 @@ class Filters(
         }
     }
 
-    fun resetButterworthFilters() {
-        butterworthInitialized = false
-        for (i in 0..2) butterworthFilters[i] = Butterworth()
-    }
-
-    // ----- 3D band-pass, persistent per-axis HP→LP chain (streaming) -----
-
-    private data class AxisBP(
-        var hp: Butterworth = Butterworth(),
-        var lp: Butterworth = Butterworth(),
-        var configured: Boolean = false,
-        var low: Double = -1.0,
-        var high: Double = -1.0,
-        var fs: Int = -1,
-        var order: Int = -1
-    )
-
-    private val axisBp = Array(3) { AxisBP() }
-
-    /**
-     * Streaming per-axis band-pass (HP then LP) with persistent state.
-     * Use when filtering one 3D sample at a time.
-     */
-    fun butterworthBandPass(
-        input: Array<BigDecimal>,
-        lowCut: Double,
-        highCut: Double,
-        fs: Int,
-        order: Int = 4
-    ): Array<BigDecimal> {
-        val (lo, hi) = sanitizeBand(fs, lowCut, highCut)
-        val out = Array(3) { BigDecimal.ZERO }
-        for (i in 0..2) {
-            val chain = axisBp[i]
-            if (!chain.configured || chain.low != lo || chain.high != hi || chain.fs != fs || chain.order != order) {
-                chain.hp = Butterworth().apply { highPass(order, fs.toDouble(), lo) }
-                chain.lp = Butterworth().apply { lowPass(order, fs.toDouble(), hi) }
-                chain.low = lo; chain.high = hi; chain.fs = fs; chain.order = order; chain.configured = true
-            }
-            val x = input[i].toDouble()
-            val y = chain.lp.filter(chain.hp.filter(x))
-            out[i] = BigDecimal.valueOf(y)
-        }
-        return out
-    }
-
-    fun resetBandPass3D() {
-        for (i in 0..2) axisBp[i] = AxisBP()
-    }
-
-    // ----- Magnitude band-pass (preferred for IPIN pipeline) -----
+    // ----- Magnitude band-pass -----
 
     private var bp = Butterworth()
     private var bpConfigured = false
@@ -156,7 +108,7 @@ class Filters(
     /**
      * Configure single IIR for magnitude band-pass (center/bandwidth form).
      */
-    fun configureMagnitudeBandPass(
+    private fun configureMagnitudeBandPass(
         fs: Int,
         low: Double,
         high: Double,
@@ -169,14 +121,6 @@ class Filters(
         bp = Butterworth().apply { bandPass(order, fs.toDouble(), center, bwHz) }
         bpConfigured = true
         bpLow = lo; bpHigh = hi; bpFs = fs; bpOrder = order
-    }
-
-    /**
-     * Filter one magnitude sample (requires prior configureMagnitudeBandPass).
-     */
-    fun filterMagnitudeSample(x: Double): Double {
-        check(bpConfigured) { "Call configureMagnitudeBandPass() first" }
-        return bp.filter(x)
     }
 
     /**
@@ -198,33 +142,6 @@ class Filters(
         return y
     }
 
-    /**
-     * Zero-phase filtering: forward + reverse with state reset.
-     */
-    fun filterMagnitudeBandPassSeriesZeroPhase(
-        magNoDc: DoubleArray,
-        fs: Int,
-        low: Double,
-        high: Double,
-        order: Int = 6
-    ): DoubleArray {
-        require(magNoDc.isNotEmpty()) { "magNoDc is empty" }
-        // forward
-        val yFwd = filterMagnitudeBandPassSeries(magNoDc, fs, low, high, order)
-        // reverse
-        resetBandPass()
-        configureMagnitudeBandPass(fs, low, high, order)
-        val rev = yFwd.reversedArray()
-        val yRev = DoubleArray(rev.size)
-        for (i in rev.indices) yRev[i] = bp.filter(rev[i])
-        return yRev.reversedArray()
-    }
-
-    fun resetBandPass() {
-        bpConfigured = false
-        bp = Butterworth()
-        bpLow = -1.0; bpHigh = -1.0; bpFs = -1; bpOrder = -1
-    }
 
     // ----- Helpers -----
 
