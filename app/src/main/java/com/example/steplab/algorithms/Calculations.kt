@@ -6,7 +6,6 @@ import java.math.MathContext
 import org.jtransforms.fft.DoubleFFT_1D
 import kotlin.math.ceil
 import kotlin.math.floor
-import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -127,7 +126,7 @@ class Calculations(
 
     /**
      * Optional decimation to a more “pedometer-friendly” rate (~50–60 Hz).
-     * Call this right after computeMagnitudeWithoutDC if your fs is very high.
+     * Used for fs very high.
      */
     fun downsampleForWalking(
         x: DoubleArray,
@@ -216,94 +215,9 @@ class Calculations(
     fun computeNormalizedAutocorrelation(segment: DoubleArray): DoubleArray =
         autocorrNormalizedBiased(segment)
 
-    /**
-     * Find first local ACF peak ≥ threshold within plausible lag range from fs/f0.
-     * Falls back to full search if fs/f0 unknown.
-     */
-    fun findFirstPeakAboveThreshold(
-        autocorrelation: DoubleArray,
-        threshold: Double
-    ): Pair<Int, Double> {
-        val n = autocorrelation.size
-        if (n < 3) return 0 to (autocorrelation.getOrNull(1) ?: 0.0)
-
-        val fs = lastFs
-        val f0 = lastF0Hz
-        val hasParams = fs > 0 && !f0.isNaN() && f0 > 0.5
-
-        val (minLag, maxLag) = if (hasParams) {
-            val k0 = (fs / f0).roundToInt()
-            val minK = max(1, (k0 * 0.65).roundToInt())
-            val maxK = min(n - 2, (k0 * 1.5).roundToInt())
-            minK to maxK
-        } else {
-            // conservative generic range
-            val minK = max(1, (fs.takeIf { it > 0 }?.let { floor(it / 3.5) } ?: 2.0).toInt())
-            val maxK = min(n - 2, (fs.takeIf { it > 0 }?.let { ceil(it / 1.0) } ?: (n - 2).toDouble()).toInt())
-            minK to maxK
-        }
-
-        return firstPeakAbove(autocorrelation, threshold, minLag, maxLag)
-    }
-
     /** Stddev helper. */
     fun computeStandardDeviation(signal: DoubleArray): Double = stddev(signal)
 
-
-    // ------------------- Step counting guards -------------------
-
-    /**
-     * Convert an autocorrelation lag into steps for a segment.
-     * - Uses steps = round(len / k).
-     * - Never multiply by 2.
-     * - If estimated steps exceed 35% of those expected from global cadence,
-     *   apply a "harmonic" correction: halve them.
-     */
-    fun stepsFromLagSafe(
-        segLen: Int,
-        lagK: Int,
-        fs: Int,
-        f0HzGlobal: Double? = null
-    ): Int {
-        if (segLen <= 0 || lagK <= 0) return 0
-        var steps = ((segLen.toDouble() / lagK) + 0.5).toInt()
-
-        val f0 = f0HzGlobal
-        if (f0 != null && f0.isFinite() && f0 > 0.0 && fs > 0) {
-            val expected = segLen.toDouble() / fs * f0 // expected steps in segment
-            val maxAllowed = kotlin.math.ceil(expected * 1.35).toInt()
-            if (steps > maxAllowed && steps >= 3) {
-                // typical stride/step confusion case -> halve
-                steps = max(1, (steps / 2.0).roundToInt())
-            }
-        }
-        return steps
-    }
-
-    /**
-     * Clamp finale del conteggio totale ai valori compatibili con la cadenza globale.
-     * Utile quando diversi segmenti sono un po’ ottimistici.
-     */
-    fun clampStepsToCadence(
-        totalSteps: Int,
-        activeSamples: Int,
-        fs: Int,
-        f0HzGlobal: Double
-    ): Int {
-        if (totalSteps <= 0 || fs <= 0 || !f0HzGlobal.isFinite() || f0HzGlobal <= 0.0) return max(0, totalSteps)
-        val expected = activeSamples.toDouble() / fs * f0HzGlobal
-        val maxAllowed = kotlin.math.ceil(expected * 1.35).toInt() // tolerance +35%
-        val minAllowed = kotlin.math.floor(expected * 0.65).toInt() // tolerance -35%
-
-        var out = totalSteps
-        // hard correction if we are close to doubling
-        if (out > expected * 1.75) {
-            out = (out / 2.0).roundToInt()
-        }
-        // soft clamp within allowed limits
-        out = out.coerceIn(minAllowed, maxAllowed).coerceAtLeast(0)
-        return out
-    }
 
     // ============ Internal helpers ============
 
@@ -469,28 +383,4 @@ class Calculations(
         return rho
     }
 
-    /** First local peak (minLag..maxLag) ≥ threshold; else (0, rho[1] or 0). */
-    private fun firstPeakAbove(
-        rho: DoubleArray,
-        threshold: Double,
-        minLag: Int,
-        maxLag: Int
-    ): Pair<Int, Double> {
-        val start = max(1, minLag)
-        val end = min(maxLag, rho.size - 2)
-        var bestK = -1
-        var bestV = Double.NEGATIVE_INFINITY
-
-        for (k in start..end) {
-            val v = rho[k]
-            if (v > bestV) { bestV = v; bestK = k }
-            val isLocalPeak = v >= threshold && v + 1e-6 >= rho[k-1] && v + 1e-6 >= rho[k+1]
-            if (isLocalPeak) return k to v
-        }
-
-        if (bestK >= 0 && bestV >= threshold * 0.95) {
-            return bestK to bestV
-        }
-        return 0 to (rho.getOrNull(1) ?: 0.0)
-    }
 }

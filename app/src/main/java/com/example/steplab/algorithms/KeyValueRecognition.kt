@@ -4,8 +4,6 @@ import java.math.BigDecimal
 
 class KeyValueRecognition(private val configuration: Configuration) {
 
-    private val threshold = BigDecimal.valueOf(1000)
-
     private var previousAccelerometerMagnitude: BigDecimal = BigDecimal.ZERO
     private var direction: Int? = null
     private var previousDirection: Int = 0
@@ -119,7 +117,7 @@ class KeyValueRecognition(private val configuration: Configuration) {
             if (!peakDetected || previousValue > peakDetectedValue) {
                 configuration.exExMax?.let { exEx ->
                     val exMax = configuration.exMax ?: 0L
-                    val thS = 0.5 * (configuration.exMax?.toDouble() ?: 0.0 - exEx.toDouble())
+                    val thS = 0.5 * (configuration.exMax?.toDouble() ?: (0.0 - exEx.toDouble()))
                     val delta = configuration.lastStepFirstPhaseTime - exMax
 
                     if (delta > thS) {
@@ -156,7 +154,7 @@ class KeyValueRecognition(private val configuration: Configuration) {
 
                 configuration.exExMin?.let { exEx ->
                     val exMin = configuration.exMin ?: 0L
-                    val thS = 0.5 * (configuration.exMin?.toDouble() ?: 0.0 - exEx.toDouble())
+                    val thS = 0.5 * (configuration.exMin?.toDouble() ?: (0.0 - exEx.toDouble()))
                     val delta = configuration.lastStepSecondPhaseTime - exMin
 
                     if (delta > thS) {
