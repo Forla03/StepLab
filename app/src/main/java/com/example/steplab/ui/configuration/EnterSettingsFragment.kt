@@ -112,7 +112,7 @@ class EnterSettingsFragment(
 
         setupListeners()
 
-        // Apply defaults only on first creation and only if autocorr is NOT active
+        // Apply defaults only if autocorr is NOT active
         if (savedInstanceState == null && !configuration.autocorcAlg) {
             applyDefaultSelection()
         } else {
@@ -164,22 +164,22 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.realTimeMode = 0
                 modalityNotRealTime?.isChecked = false
-                
+
                 // Disable false step detection in real-time mode
                 falseStepRadio?.isEnabled = false
                 falseStepRadio?.isChecked = false
                 falseStepRadio?.alpha = 0.5f
-                
+
                 // Disable autocorrelation in real-time mode
                 autocorrelation?.isEnabled = false
                 autocorrelation?.isChecked = false
                 autocorrelation?.alpha = 0.5f
                 configuration.autocorcAlg = false
-                
+
                 // Time filtering is now enabled in real-time mode
                 timeFiltering?.isEnabled = true
                 timeFiltering?.alpha = 1.0f
-                
+
                 enableAllOptions()
             }
         }
@@ -189,22 +189,22 @@ class EnterSettingsFragment(
             if (isChecked) {
                 configuration.realTimeMode = 1
                 modalityRealTime?.isChecked = false
-                
+
                 // Enable non-real-time options
                 falseStepRadio?.isEnabled = true
                 falseStepRadio?.isChecked = true
                 falseStepRadio?.alpha = 1.0f
-                
+
                 // Time filtering is enabled in both modes now
                 timeFiltering?.isEnabled = true
                 timeFiltering?.alpha = 1.0f
-                
+
                 // Autocorrelation only if not in live testing
                 if (!isLiveTesting) {
                     autocorrelation?.isEnabled = true
                     autocorrelation?.alpha = 1.0f
                 }
-                
+
                 if (autocorrelation?.isChecked != true) {
                     enableAllOptions()
                 }
@@ -341,7 +341,7 @@ class EnterSettingsFragment(
                 configuration.autocorcAlg = false
                 enableAllOptions()
                 if (showSamplingRate) layoutSamplingRate?.visibility = View.VISIBLE
-                // Do not reset to defaults here; let the user pick or keep current config
+                applyDefaultSelection()
                 syncUiFromConfiguration()
             }
         }
@@ -365,10 +365,24 @@ class EnterSettingsFragment(
     }
 
     private fun syncUiFromConfiguration() {
-        // Reflect current configuration into UI without triggering listeners
         suppressCallbacks = true
         try {
-            // Sampling
+            // 1) Reset UI state (clear checks/visibility)
+            listOf(samplingTwenty, samplingForty, samplingFifty, samplingHundred, samplingMax)
+                .forEach { it?.isChecked = false }
+            listOf(modalityRealTime, modalityNotRealTime)
+                .forEach { it?.isChecked = false }
+            listOf(recognitionPeak, recognitionIntersection, timeFiltering, autocorrelation)
+                .forEach { it?.isChecked = false }
+            listOf(filterBagilevi, filterLowPass, noFilter, filterRotation, butterworthFilter)
+                .forEach { it?.isChecked = false }
+            listOf(cutoffTwo, cutoffThree, cutoffTen, cutoffDividedFifty)
+                .forEach { it?.isChecked = false }
+            falseStepRadio?.isChecked = false
+            hideCutoffFrequency()
+            if (showSamplingRate) layoutSamplingRate?.visibility = View.VISIBLE
+
+            // 2) Apply sampling
             when (configuration.samplingFrequencyIndex) {
                 0 -> samplingTwenty?.isChecked = true
                 1 -> samplingForty?.isChecked = true
@@ -377,20 +391,18 @@ class EnterSettingsFragment(
                 4 -> samplingMax?.isChecked = true
             }
 
-            // Modality
-            if (configuration.realTimeMode == 0) {
-                modalityRealTime?.isChecked = true
-            } else if (configuration.realTimeMode == 1) {
-                modalityNotRealTime?.isChecked = true
-            } else {
-                // Default to real-time when not set (-1)
-                modalityRealTime?.isChecked = true
-                configuration.realTimeMode = 0
+            // 3) Apply modality
+            when (configuration.realTimeMode) {
+                0 -> modalityRealTime?.isChecked = true
+                1 -> modalityNotRealTime?.isChecked = true
+                else -> {
+                    modalityRealTime?.isChecked = true
+                    configuration.realTimeMode = 0
+                }
             }
 
-            // Apply modality-specific enable/disable logic after setting the radio buttons
+            // 4) Enable/disable by modality
             if (configuration.realTimeMode == 0) {
-                // Real-time mode - disable false step and autocorrelation, but keep time filtering enabled
                 falseStepRadio?.isEnabled = false
                 falseStepRadio?.alpha = 0.5f
                 autocorrelation?.isEnabled = false
@@ -398,7 +410,6 @@ class EnterSettingsFragment(
                 timeFiltering?.isEnabled = true
                 timeFiltering?.alpha = 1.0f
             } else {
-                // Non-real-time mode - enable all non-real-time options
                 falseStepRadio?.isEnabled = true
                 falseStepRadio?.alpha = 1.0f
                 timeFiltering?.isEnabled = true
@@ -409,6 +420,7 @@ class EnterSettingsFragment(
                 }
             }
 
+            // 5) Autocorrelation short-circuit
             if (configuration.autocorcAlg) {
                 autocorrelation?.isChecked = true
                 uncheckAllOtherOptionsForAutocorrelation()
@@ -421,14 +433,14 @@ class EnterSettingsFragment(
                 if (showSamplingRate) layoutSamplingRate?.visibility = View.VISIBLE
             }
 
-            // Recognition
+            // 6) Recognition
             when (configuration.recognitionAlgorithm) {
                 0 -> recognitionPeak?.isChecked = true
                 1 -> recognitionIntersection?.isChecked = true
                 2 -> timeFiltering?.isChecked = true
             }
 
-            // Filters
+            // 7) Filters
             when (configuration.filterType) {
                 0 -> { filterBagilevi?.isChecked = true; hideCutoffFrequency() }
                 1 -> { filterLowPass?.isChecked = true; showCutoffFrequency() }
@@ -437,7 +449,7 @@ class EnterSettingsFragment(
                 4 -> { butterworthFilter?.isChecked = true; hideCutoffFrequency() }
             }
 
-            // Cutoff
+            // 8) Cutoff
             when (configuration.cutoffFrequencyIndex) {
                 0 -> cutoffTwo?.isChecked = true
                 1 -> cutoffThree?.isChecked = true
@@ -445,7 +457,7 @@ class EnterSettingsFragment(
                 3 -> cutoffDividedFifty?.isChecked = true
             }
 
-            // False step
+            // 9) False-step
             falseStepRadio?.isChecked = configuration.falseStepDetectionEnabled
 
         } finally {
@@ -579,6 +591,7 @@ class EnterSettingsFragment(
         try {
             samplingMax?.isChecked = true
             modalityRealTime?.isChecked = true
+            modalityNotRealTime?.isChecked = false
             recognitionIntersection?.isChecked = true
             filterLowPass?.isChecked = true
             cutoffDividedFifty?.isChecked = true
@@ -588,7 +601,7 @@ class EnterSettingsFragment(
 
         // default configuration values
         applyDefaultConfigurationValues()
-        
+
         // Apply enable/disable logic based on real-time mode
         enableAllOptions()
     }

@@ -1,15 +1,17 @@
 package com.example.steplab.ui.test
 
-import android.content.Intent
 import android.os.Bundle
+import androidx.activity.addCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
+import com.example.steplab.ui.main.MainActivity
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class SelectTest : AppCompatActivity() {
 
@@ -31,39 +33,44 @@ class SelectTest : AppCompatActivity() {
         recyclerView.apply {
             adapter = testAdapter
             layoutManager = LinearLayoutManager(this@SelectTest)
+            // Keep true if items have fixed height to help the RecyclerView optimize.
             setHasFixedSize(true)
+            // Disable item change animations to avoid jank on large updates.
+            itemAnimator = null
         }
+
+        // Load DB + mapping off-main, then update UI on main.
         lifecycleScope.launch {
             try {
-                MainActivity.getDatabase()?.let { db ->
+                val items: List<CardTest> = withContext(Dispatchers.IO) {
+                    val db = MainActivity.getDatabase() ?: return@withContext emptyList()
+                    val rows = db.databaseDao()?.getAllTests().orEmpty()
 
-                    testDataset.clear()
-                    db.databaseDao()?.getAllTests()?.forEach { test ->
-                        testDataset.add(
-                            CardTest(
-                                test.testId.toString(),
-                                test.testValues ?: "",
-                                test.numberOfSteps ?: 0,
-                                test.additionalNotes ?: "",
-                                test.fileName ?: ""
-                            )
+                    // Map only the lightweight fields for list items.
+                    rows.map { test ->
+                        CardTest(
+                            testId = test.testId.toString(),
+                            testValues = "", // keep list light; load on detail if needed
+                            numberOfSteps = test.numberOfSteps ?: 0,
+                            additionalNotes = test.additionalNotes.orEmpty(),
+                            filePathName = test.fileName.orEmpty()
                         )
                     }
-                    testAdapter.notifyDataSetChanged()
                 }
+
+                // Update adapter on main thread
+                testDataset.clear()
+                testDataset.addAll(items)
+                testAdapter.notifyDataSetChanged()
 
             } catch (e: Exception) {
                 e.printStackTrace()
             }
         }
-    }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-        startActivity(
-            Intent(applicationContext, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-        )
+        // Handle back press without creating a new MainActivity instance.
+        onBackPressedDispatcher.addCallback(this) {
+            finish()
+        }
     }
 }

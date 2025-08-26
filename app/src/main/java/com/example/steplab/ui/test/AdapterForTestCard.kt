@@ -14,7 +14,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.configuration.ConfigurationsComparison

@@ -10,7 +10,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.*
 import com.example.steplab.data.local.EntityTest
@@ -24,6 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.util.*
+import androidx.activity.addCallback
 
 class ConfigurationsComparison : AppCompatActivity() {
 
@@ -66,6 +67,13 @@ class ConfigurationsComparison : AppCompatActivity() {
                 processConfigurationsSync()
             }
         }
+
+        onBackPressedDispatcher.addCallback(this){
+            startActivity(
+                Intent(applicationContext, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        }
     }
 
     private fun setupViews() {
@@ -76,12 +84,17 @@ class ConfigurationsComparison : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
 
         startButton.setOnClickListener {
-            startActivity(Intent(applicationContext, SelectConfigurationsToCompare::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+            startActivity(
+                Intent(applicationContext, SelectConfigurationsToCompare::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
         }
         selectTestButton.setOnClickListener {
-            startActivity(Intent(applicationContext, SelectTest::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-                .putExtra("configurations", configurations))
+            startActivity(
+                Intent(applicationContext, SelectTest::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                    .putExtra("configurations", configurations)
+            )
         }
     }
 
@@ -97,7 +110,6 @@ class ConfigurationsComparison : AppCompatActivity() {
         val keysList = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
         var index = 0
 
-        // Baseline dataset (red)
         val baseLine = LineDataSet(null, "Magnitude of Acceleration").apply {
             color = Color.RED
             setDrawCircles(false)
@@ -129,17 +141,45 @@ class ConfigurationsComparison : AppCompatActivity() {
         val adapter = AdapterForConfigurationsCard(
             configurations = dataset,
             colors = colorDataset,
-            stepCounts = stepDataset,
-            chartDataSets = myLines,
-            context = this@ConfigurationsComparison,
-            fullChartData = chartData,
-            chart = chart
-        )
+            stepCounts = stepDataset
+        ) { selectedIndex ->
+            // Highlight the corresponding chart series (dataset + 1; 0 is baseline)
+            highlightChart(selectedIndex)
+        }
         recyclerView.apply {
             this.adapter = adapter
             layoutManager = LinearLayoutManager(this@ConfigurationsComparison)
             setHasFixedSize(true)
         }
+    }
+
+    private fun highlightChart(selectedIndex: Int) {
+        val total = chartData.dataSetCount
+        if (total <= 1) return // only baseline exists
+
+        for (i in 0 until total) {
+            val set = chartData.getDataSetByIndex(i) as LineDataSet
+            when (i) {
+                0 -> { // baseline
+                    set.lineWidth = 2f
+                    set.setDrawCircles(false)
+                }
+                selectedIndex + 1 -> { // selected configuration (offset +1 because 0 is baseline)
+                    set.lineWidth = 3f
+                    set.setDrawCircles(true)
+                    set.circleRadius = 4f
+                }
+                else -> {
+                    set.lineWidth = 1f
+                    set.setDrawCircles(true)
+                    set.circleRadius = 3f
+                }
+            }
+        }
+        chart.data = chartData
+        chartData.notifyDataChanged()
+        chart.notifyDataSetChanged()
+        chart.invalidate()
     }
 
     private fun processConfigurationsSync() {
@@ -158,11 +198,9 @@ class ConfigurationsComparison : AppCompatActivity() {
                     val configColor = colors[i % colors.size]
                     val context = ConfigurationContext(clonedConfig, i)
 
-                    // Check if autocorrelation algorithm is enabled
                     if (clonedConfig.autocorcAlg) {
                         context.processAutocorrelationAlgorithm()
                     } else {
-                        // Process all events for this configuration in background
                         val keys = jsonObject.keys()
                         var processedEvents = 0
 
@@ -172,15 +210,12 @@ class ConfigurationsComparison : AppCompatActivity() {
                             context.myOnSensorChanged(key.toLong(), eventJson)
 
                             processedEvents++
-
-                            // Yield control every 100 events to prevent ANR
                             if (processedEvents % 100 == 0) {
                                 kotlinx.coroutines.yield()
                             }
                         }
                     }
 
-                    // Collect processed data
                     processedConfigurations.add(
                         ProcessedConfiguration(
                             clonedConfig,
@@ -195,10 +230,8 @@ class ConfigurationsComparison : AppCompatActivity() {
                 }
             }
 
-            // Update UI on main thread
             withContext(Dispatchers.Main) {
                 updateUIWithProcessedConfigurations(processedConfigurations)
-                // Hide progress bar and show results
                 progressBar.visibility = View.GONE
                 recyclerView.visibility = View.VISIBLE
             }
@@ -207,7 +240,6 @@ class ConfigurationsComparison : AppCompatActivity() {
 
     private fun updateUIWithProcessedConfigurations(processedConfigurations: List<ProcessedConfiguration>) {
         for ((index, processed) in processedConfigurations.withIndex()) {
-            // Add LineDataSet for this configuration
             val configDataSet = LineDataSet(processed.chartEntries, "${index + 1}").apply {
                 color = processed.color
                 setDrawValues(true)
@@ -215,20 +247,18 @@ class ConfigurationsComparison : AppCompatActivity() {
                 setDrawCircles(true)
                 circleRadius = 4f
                 lineWidth = 2f
-                setDrawIcons(!isDrawIconsEnabled) // Enable icons for false steps
+                setDrawIcons(!isDrawIconsEnabled) // keep icons for "false steps" if used
             }
 
             myLines.add(configDataSet)
             chartData.addDataSet(configDataSet)
             chart.data = chartData
 
-            // Add results to datasets
             dataset.add(processed.configuration)
             colorDataset.add(processed.color)
             stepDataset.add(processed.stepCount)
         }
 
-        // Final chart update
         chartData.notifyDataChanged()
         chart.notifyDataSetChanged()
         chart.invalidate()
@@ -242,12 +272,6 @@ class ConfigurationsComparison : AppCompatActivity() {
         val chartEntries: MutableList<Entry>
     )
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-        startActivity(Intent(applicationContext, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
-    }
-
     private inner class ConfigurationContext(
         val configuration: Configuration,
         val index: Int
@@ -256,7 +280,7 @@ class ConfigurationsComparison : AppCompatActivity() {
 
         var stepsCount: Int
             get() = stepDetectionProcessor.stepsCount
-            private set(value) {} // Read-only from outside
+            private set(value) {}
 
         val chartEntries: MutableList<Entry>
             get() = stepDetectionProcessor.chartEntries
