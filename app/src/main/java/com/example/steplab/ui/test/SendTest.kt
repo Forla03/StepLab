@@ -9,9 +9,8 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
-import com.example.steplab.data.local.EntityTest
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File

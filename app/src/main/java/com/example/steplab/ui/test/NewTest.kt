@@ -7,14 +7,13 @@ import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Bundle
-import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Calculations
 import com.example.steplab.data.local.EntityTest
@@ -22,7 +21,9 @@ import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
 import com.github.mikephil.charting.data.LineDataSet
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.math.BigDecimal
@@ -107,9 +108,7 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                     try {
                         MainActivity.getDatabase()?.let { db ->
                             val firstTimestamp = testData.keys.firstOrNull()?.toLongOrNull() ?: System.currentTimeMillis()
-                            val calendar = java.util.Calendar.getInstance().apply {
-                                timeInMillis = firstTimestamp
-                            }
+                            val calendar = java.util.Calendar.getInstance().apply { timeInMillis = firstTimestamp }
 
                             val fileName = String.format(
                                 "%04d-%02d-%02d_%02d:%02d:%02d.txt",
@@ -121,26 +120,32 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                                 calendar.get(java.util.Calendar.SECOND)
                             )
 
-                            val testValuesJson = JSONObject(testData as Map<*, *>).toString()
-                            val exportData = JSONObject().apply {
-                                put("number_of_steps", stepCount)
-                                put("additional_notes", notesInput.text.toString())
-                                put("test_values", JSONObject(testData as Map<*, *>))
+                            val notes = notesInput.text.toString()
+
+                            withContext(Dispatchers.IO) {
+                                val testValuesObj = JSONObject(testData as Map<*, *>)
+                                val exportData = JSONObject().apply {
+                                    put("number_of_steps", stepCount)
+                                    put("additional_notes", notes)
+                                    put("test_values", testValuesObj)
+                                }
+
+                                val file = File(applicationContext.filesDir, fileName)
+                                file.writeText(exportData.toString())
+                                //file.setReadable(true, false)
+
+                                val entity = EntityTest(
+                                    fileName = fileName,
+                                    numberOfSteps = stepCount.toIntOrNull() ?: 0,
+                                    testValues = testValuesObj.toString(),
+                                    additionalNotes = notes
+                                )
+                                db.databaseDao()?.insertTest(entity)
                             }
 
-                            val file = File(applicationContext.filesDir, fileName)
-                            file.writeText(exportData.toString())
-                            file.setReadable(true, false)
-
-                            val entity = EntityTest(
-                                fileName = fileName,
-                                numberOfSteps = stepCount.toIntOrNull() ?: 0,
-                                testValues = testValuesJson,
-                                additionalNotes = notesInput.text.toString()
-                            )
-                            db.databaseDao()?.insertTest(entity)
-
+                            // Back on Main: UI updates
                             Toast.makeText(this@NewTest, getString(R.string.new_test_saved), Toast.LENGTH_SHORT).show()
+                            testData.clear()
                             startActivity(
                                 Intent(applicationContext, MainActivity::class.java)
                                     .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
@@ -155,7 +160,6 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                 Toast.makeText(this@NewTest, getString(R.string.number_steps_error), Toast.LENGTH_SHORT).show()
             }
         }
-
 
         dialog.show()
     }

@@ -6,7 +6,7 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import androidx.appcompat.app.AppCompatActivity
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.configuration.EnterSettingsFragment

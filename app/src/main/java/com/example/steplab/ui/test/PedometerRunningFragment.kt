@@ -12,17 +12,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.fragment.app.Fragment
-import com.example.steplab.MainActivity
+import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.*
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
-import java.util.Calendar
 import com.github.mikephil.charting.data.LineDataSet
-import java.math.BigDecimal
-import java.math.MathContext
-import java.util.*
 
 class PedometerRunningFragment : Fragment(), SensorEventListener {
 

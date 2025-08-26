@@ -7,7 +7,7 @@ import android.widget.FrameLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.example.steplab.MainActivity
+import androidx.activity.addCallback
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.test.SelectTest
@@ -100,14 +100,10 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
                     .putExtra("configurations", configurations)
             )
         }
+
+        onBackPressedDispatcher.addCallback(this){
+            finish()
+        }
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-        startActivity(
-            Intent(applicationContext, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-        )
-    }
 }
