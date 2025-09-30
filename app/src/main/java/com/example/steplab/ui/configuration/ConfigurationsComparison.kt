@@ -182,6 +182,14 @@ class ConfigurationsComparison : AppCompatActivity() {
         chart.invalidate()
     }
 
+    private fun estimateFsFromJson(json: JSONObject): Int {
+        val keys = json.keys().asSequence().map { it.toLong() }.sorted().toList()
+        if (keys.size < 3) return 50
+        val dtMsAvg = (keys.last() - keys.first()).toDouble() / (keys.size - 1).coerceAtLeast(1)
+        val fs = (1000.0 / dtMsAvg).toInt().coerceIn(30, 200)
+        return fs
+    }
+
     private fun processConfigurationsSync() {
         // Show progress bar
         progressBar.visibility = View.VISIBLE
@@ -198,14 +206,18 @@ class ConfigurationsComparison : AppCompatActivity() {
                     val configColor = colors[i % colors.size]
                     val context = ConfigurationContext(clonedConfig, i)
 
+                    // Estimate and set FS for batch processing to ensure consistent frequency calculation
+                    val fsBatch = estimateFsFromJson(jsonObject)
+                    context.setFsForBatch(fsBatch)
+
                     if (clonedConfig.autocorcAlg) {
                         context.processAutocorrelationAlgorithm()
                     } else {
-                        val keys = jsonObject.keys()
+                        // Sort keys by timestamp to ensure temporal order - CRITICAL for step detection algorithms
+                        val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
                         var processedEvents = 0
 
-                        while (keys.hasNext()) {
-                            val key = keys.next()
+                        for (key in keysSorted) {
                             val eventJson = jsonObject.getJSONObject(key)
                             context.myOnSensorChanged(key.toLong(), eventJson)
 
@@ -291,6 +303,10 @@ class ConfigurationsComparison : AppCompatActivity() {
 
         fun myOnSensorChanged(instant: Long, eventJson: JSONObject) {
             stepDetectionProcessor.processBatchSensorData(instant, eventJson)
+        }
+
+        fun setFsForBatch(fs: Int) {
+            stepDetectionProcessor.setFixedFsForBatch(fs)
         }
     }
 }

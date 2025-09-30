@@ -121,23 +121,20 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent) {
-        timestamp = System.currentTimeMillis()
+        val nowMs = System.currentTimeMillis()
 
-        // Process sensor data using the helper class
+        if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
+            stepDetectionProcessor.updateFsFromNs(event.timestamp)
+        }
+
         val result = stepDetectionProcessor.processRealTimeSensorData(
             event.sensor.type,
             event.values,
-            timestamp
+            nowMs // ms per logiche di soglie/tempi già in ms
         )
 
-        // Update chart for accelerometer events (works for both real-time and non-real-time modes)
-        if (stepDetectionProcessor.accelerometerEvent) {
-            updateChart(result)
-        }
-
-        if (result.stepDetected) {
-            onStepDetected()
-        }
+        if (stepDetectionProcessor.accelerometerEvent) updateChart(result)
+        if (result.stepDetected) onStepDetected()
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {

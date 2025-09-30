@@ -479,15 +479,21 @@ class EnterSettingsFragment(
     }
 
     private fun uncheckAllFiltersExceptKeepingFalseStep(checked: RadioButton?) {
-        val shouldKeepFalseStep = configuration.realTimeMode == 1 && falseStepRadio?.isChecked == true
+        // CORREZIONE BUG: Permette la coesistenza di Butterworth + False Step Detection
+        val shouldKeepFalseStep = configuration.realTimeMode == 1 && 
+            (falseStepRadio?.isChecked == true || configuration.falseStepDetectionEnabled)
+        
         listOf(
             filterBagilevi, filterLowPass, noFilter, filterRotation,
             butterworthFilter, autocorrelation
         ).filter { it != checked }.forEach { it?.isChecked = false }
 
+        // CORREZIONE CRITICA: Non deselezionare false step se è compatibile con il filtro
         if (shouldKeepFalseStep && checked != falseStepRadio) {
-            // keep false step checked in non real-time
-        } else if (checked != falseStepRadio) {
+            // Mantieni false step selezionata in modalità non real-time
+            // Butterworth filter è compatibile con false step detection
+        } else if (checked != falseStepRadio && checked != butterworthFilter) {
+            // Deseleziona false step SOLO se non è Butterworth filter
             falseStepRadio?.isChecked = false
         }
     }

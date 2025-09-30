@@ -13,7 +13,7 @@
     <string name="step_recognition_algorithm_italic"><i>Step Recognition Algorithm: </i></string>
     <string name="peak">Peak Algorithm</string>
     <string name="intersection">Peak + Intersection Algorithm</string>
-    <string name="timeFiltering">Time filtering + Peak + Intersection</string>
+    <string name="timeFiltering">Time filtering + Peak</string>
     <string name="filter">Filter</string>
     <string name="filter_italic"><i>Filter: </i></string>
     <string name="bagilevi_filter">Bagilevi Algorithm</string>
