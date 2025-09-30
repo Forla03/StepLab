@@ -17,6 +17,7 @@ import com.example.steplab.data.local.MyDatabase
 import com.example.steplab.ui.configuration.SelectConfigurationsToCompare
 import com.example.steplab.ui.test.LiveTesting
 import com.example.steplab.ui.test.NewTest
+import com.example.steplab.ui.test.SavedTests
 import com.example.steplab.ui.test.SendTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -33,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnCompareConfigurations: Button
     private lateinit var btnImportTest: Button
     private lateinit var btnSendTest: Button
+    private lateinit var btnSavedTests: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,27 +45,37 @@ class MainActivity : AppCompatActivity() {
             applicationContext,
             MyDatabase::class.java,
             "tests.db"
-        ).build()
+        ).addMigrations(MyDatabase.MIGRATION_1_2).build()
 
         btnEnterConfiguration = findViewById(R.id.enter_configuration)
         btnRegisterNewTest = findViewById(R.id.register_new_test)
         btnCompareConfigurations = findViewById(R.id.compare_configurations)
         btnImportTest = findViewById(R.id.import_test)
         btnSendTest = findViewById(R.id.send_test)
+        btnSavedTests = findViewById(R.id.saved_tests)
 
         // Disable actions that require existing tests
         setHasTests(false)
+        setHasSavedTests(false)
 
         // Enable buttons only if tests exist (run on IO)
         lifecycleScope.launch {
-            val hasAny = withContext(Dispatchers.IO) {
+            val hasAnyTests = withContext(Dispatchers.IO) {
                 try {
                     databaseInstance?.databaseDao()?.getAllTests()?.isNotEmpty() == true
                 } catch (_: Exception) {
                     false
                 }
             }
-            setHasTests(hasAny)
+            val hasAnySavedTests = withContext(Dispatchers.IO) {
+                try {
+                    databaseInstance?.databaseDao()?.getAllSavedConfigurationComparisons()?.isNotEmpty() == true
+                } catch (_: Exception) {
+                    false
+                }
+            }
+            setHasTests(hasAnyTests)
+            setHasSavedTests(hasAnySavedTests)
         }
 
         // Optional: enlarge CursorWindow buffer
@@ -87,6 +99,9 @@ class MainActivity : AppCompatActivity() {
         }
         btnSendTest.setOnClickListener {
             startActivity(Intent(this, SendTest::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+        }
+        btnSavedTests.setOnClickListener {
+            startActivity(Intent(this, SavedTests::class.java).addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
         }
 
         // Import via SAF: "text/plain" (.txt with JSON content)
@@ -168,6 +183,10 @@ class MainActivity : AppCompatActivity() {
     private fun setHasTests(has: Boolean) {
         btnCompareConfigurations.isEnabled = has
         btnSendTest.isEnabled = has
+    }
+
+    private fun setHasSavedTests(has: Boolean) {
+        btnSavedTests.isEnabled = has
     }
 
     companion object {

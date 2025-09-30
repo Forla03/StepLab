@@ -120,6 +120,17 @@
             android:text="@string/send_test"
             android:enabled="false">
         </Button>
+        <Button
+            android:id="@+id/saved_tests"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="20dp"
+            android:layout_marginLeft="40dp"
+            android:layout_marginRight="40dp"
+            android:padding="20dp"
+            android:text="@string/saved_tests"
+            android:enabled="false">
+        </Button>
     </LinearLayout>
 
 </LinearLayout>

@@ -8,6 +8,7 @@ import androidx.room.Query
 
 @Dao
 interface DatabaseDao {
+    // EntityTest methods
     @Query("SELECT * FROM EntityTest")
     suspend fun getAllTests(): List<EntityTest>
 
@@ -22,4 +23,20 @@ interface DatabaseDao {
 
     @Query("SELECT * FROM EntityTest WHERE fileName = :fileName")
     suspend fun getTestFromPath(fileName: String): EntityTest?
+
+    // SavedConfigurationComparison methods
+    @Query("SELECT * FROM saved_configuration_comparisons ORDER BY createdAt DESC")
+    suspend fun getAllSavedConfigurationComparisons(): List<EntitySavedConfigurationComparison>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSavedConfigurationComparison(savedComparison: EntitySavedConfigurationComparison)
+
+    @Query("DELETE FROM saved_configuration_comparisons WHERE id = :id")
+    suspend fun deleteSavedConfigurationComparison(id: Int)
+
+    @Query("SELECT * FROM saved_configuration_comparisons WHERE id = :id")
+    suspend fun getSavedConfigurationComparisonById(id: Int): EntitySavedConfigurationComparison?
+
+    @Query("SELECT * FROM saved_configuration_comparisons WHERE name = :name")
+    suspend fun getSavedConfigurationComparisonByName(name: String): EntitySavedConfigurationComparison?
 }

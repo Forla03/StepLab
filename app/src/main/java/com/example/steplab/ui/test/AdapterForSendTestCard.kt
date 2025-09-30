@@ -31,6 +31,7 @@ class AdapterForSendTestCard(
         val notesTextView: TextView = itemView.findViewById(R.id.notes)
         val stepsTextView: TextView = itemView.findViewById(R.id.number_of_steps)
         val layout: LinearLayout = itemView.findViewById(R.id.layout)
+        val deleteButton: ImageButton = itemView.findViewById(R.id.delete_button)
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -63,7 +64,7 @@ class AdapterForSendTestCard(
             }
         }
 
-        holder.layout.setOnLongClickListener {
+        holder.deleteButton.setOnClickListener {
             val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
             vibrator.vibrate(50)
 
@@ -85,8 +86,6 @@ class AdapterForSendTestCard(
                 .setNegativeButton(context.getString(R.string.No), null)
                 .create()
                 .show()
-
-            true
         }
     }
 }

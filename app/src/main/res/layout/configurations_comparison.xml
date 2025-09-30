@@ -60,26 +60,45 @@
         </View>
 
     <LinearLayout
+        android:id="@+id/buttons_layout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_weight="0"
         android:orientation="horizontal"
-        android:gravity="center">
+        android:gravity="center"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="8dp">
+        
         <Button
             android:id="@+id/start_new_comparison"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.5"
-            android:layout_margin="10dp"
-            android:text="@string/start_new_comparison">
+            android:layout_weight="1"
+            android:layout_marginEnd="4dp"
+            android:text="@string/start_new_comparison"
+            android:textSize="12sp">
         </Button>
+        
         <Button
             android:id="@+id/select_another_test"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="0.5"
-            android:layout_margin="10dp"
-            android:text="@string/select_another_test">
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:text="@string/select_another_test"
+            android:textSize="12sp">
+        </Button>
+        
+        <Button
+            android:id="@+id/save_comparison"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="4dp"
+            android:text="@string/save"
+            android:textSize="12sp"
+            android:visibility="visible">
         </Button>
 
     </LinearLayout>
