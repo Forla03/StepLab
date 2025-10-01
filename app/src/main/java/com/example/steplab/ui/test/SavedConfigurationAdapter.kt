@@ -37,7 +37,7 @@ class SavedConfigurationAdapter(
             when (config.recognitionAlgorithm) {
                 0 -> "Peak Only"
                 1 -> "Peak + Intersection"
-                2 -> "Time Filtering"
+                2 -> " Peak + Time Filtering"
                 else -> "Unknown"
             }
         }
