@@ -65,6 +65,16 @@
                         android:textStyle="italic"
                         android:textSize="16sp" />
                 </LinearLayout>
+                <ImageButton
+                    android:id="@+id/delete_button"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="center"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_menu_delete"
+                    android:contentDescription="@string/delete"
+                    android:scaleType="centerInside" />
             </LinearLayout>
 
         </LinearLayout>

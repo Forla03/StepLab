@@ -49,8 +49,13 @@ class AdapterForTestCard(
         holder.number.text = "${position + 1}. "
 
         try {
-            val timestampKey = JSONObject(testDataset[position].testValues).keys().next().toLong()
-            holder.calendar.timeInMillis = timestampKey
+            val testValues = testDataset[position].testValues
+            if (testValues.isNullOrEmpty()) {
+                holder.calendar.timeInMillis = System.currentTimeMillis()
+            } else {
+                val timestampKey = JSONObject(testValues).keys().next().toLong()
+                holder.calendar.timeInMillis = timestampKey
+            }
 
             val day = holder.calendar[Calendar.DAY_OF_MONTH].toString().padStart(2, '0')
             val month = (holder.calendar[Calendar.MONTH] + 1).toString().padStart(2, '0')

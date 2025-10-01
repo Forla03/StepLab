@@ -5,6 +5,8 @@ import org.json.JSONObject
 import java.math.BigDecimal
 import java.math.MathContext
 import java.util.*
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.pow
 import kotlin.math.floor
 import kotlin.math.max
@@ -23,8 +25,12 @@ class StepDetectionProcessor(
     private val keyPointDetection = KeyValueRecognition(configuration)
     private val stepDetection = StepDetection(configuration)
 
-    var stepDetected = false
-        private set
+    // Thread-safe atomic variables to prevent race conditions
+    private val _stepDetected = AtomicBoolean(false)
+    var stepDetected: Boolean
+        get() = _stepDetected.get()
+        private set(value) = _stepDetected.set(value)
+    
     var accelerometerEvent = false
     private var firstSignal = true
     var lastAccelerationMagnitude: BigDecimal? = null
@@ -36,8 +42,12 @@ class StepDetectionProcessor(
         private set
     private var alpha: BigDecimal? = null
 
-    var stepsCount = 0
-        private set
+    // Thread-safe atomic counter for step count
+    private val _stepsCount = AtomicInteger(0)
+    var stepsCount: Int
+        get() = _stepsCount.get()
+        private set(value) = _stepsCount.set(value)
+    
     var counter = 0
         private set
 
@@ -47,9 +57,17 @@ class StepDetectionProcessor(
     private var resultMagn = 0f
     private var resultMagnPrev = 0f
     private val sumResMagn = mutableListOf<Float>()
+    
+    // Memory management constants
+    private val MAX_CHART_ENTRIES = 2000
+    private val MAX_SUM_RES_MAGN = 1000
     private var countFour = 0
     private val resLast4Steps = mutableListOf<Float>()
-    private var falseStep = false
+    // Thread-safe atomic boolean for false step detection
+    private val _falseStep = AtomicBoolean(false)
+    private var falseStep: Boolean
+        get() = _falseStep.get()
+        set(value) = _falseStep.set(value)
 
     private val last3Acc = mutableListOf<BigDecimal>()
     private var s = 0
@@ -71,6 +89,7 @@ class StepDetectionProcessor(
     private var emaFs: Double = 0.0
     private val FS_EMA_ALPHA = 0.2
     private var collectForCharts = false
+    private var forceFs: Int? = null
 
     init {
         initializeConfiguration()
@@ -141,7 +160,8 @@ class StepDetectionProcessor(
         }
         if (accelerometerEvent) {
             processFiltersAndDetection(timestamp)
-            if (configuration.recognitionAlgorithm == 1 && configuration.filterType != 4) {
+            // Apply intersection correction only for intersection algorithm (1), not for time filtering (2)
+            if (configuration.recognitionAlgorithm == 1) {
                 applyIntersectionCorrection(timestamp)
             }
         }
@@ -150,6 +170,9 @@ class StepDetectionProcessor(
         } else {
             if (configuration.falseStepDetectionEnabled) {
                 sumResMagn.add(resultMagn)
+                if (sumResMagn.size > MAX_SUM_RES_MAGN) {
+                    sumResMagn.removeAt(0)
+                }
             }
         }
         return ProcessingResult(
@@ -202,7 +225,8 @@ class StepDetectionProcessor(
             e.printStackTrace()
         }
         processFiltersAndDetection(instant)
-        if (configuration.recognitionAlgorithm == 1 && configuration.filterType != 4) {
+        // Apply intersection correction only for intersection algorithm (1), not for time filtering (2)
+        if (configuration.recognitionAlgorithm == 1) {
             applyIntersectionCorrection(instant)
         }
         if (stepDetected) {
@@ -210,6 +234,9 @@ class StepDetectionProcessor(
         } else {
             if (configuration.falseStepDetectionEnabled) {
                 sumResMagn.add(resultMagn)
+                if (sumResMagn.size > MAX_SUM_RES_MAGN) {
+                    sumResMagn.removeAt(0)
+                }
             }
         }
         collectForCharts = false
@@ -232,7 +259,7 @@ class StepDetectionProcessor(
             }
         }
         if (recordList.size < 4) {
-            stepsCount = 0
+            _stepsCount.set(0)
             return
         }
         val firstSecond = recordList.first().timestamp
@@ -252,7 +279,7 @@ class StepDetectionProcessor(
                 dropHeadSecondsForMSD = 0.3,
                 bpOrder = 6
             )
-            stepsCount = result.steps
+            _stepsCount.set(result.steps)
             val magnitudeWithoutDC = calculations.computeMagnitudeWithoutDC(samples)
             val filteredSignal = filters.filterMagnitudeBandPassSeries(
                 magNoDc = magnitudeWithoutDC,
@@ -285,19 +312,51 @@ class StepDetectionProcessor(
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            stepsCount = (recordList.size / 25).coerceAtLeast(0)
+            _stepsCount.set((recordList.size / 25).coerceAtLeast(0))
             chartEntries.clear()
         }
     }
 
+    /**
+     * Public wrapper to update frequency sampling using nanoseond timestamp from sensor events.
+     * Use this to provide the real sensor timestamp in nanoseconds for accurate frequency calculation.
+     */
+    fun updateFsFromNs(ns: Long) {
+        updateFsFromEventTimestamp(ns)
+    }
+
+    /**
+     * Set a fixed frequency sampling for batch processing mode.
+     * This prevents real-time FS calculation and uses the provided value consistently.
+     */
+    fun setFixedFsForBatch(fs: Int) {
+        forceFs = fs
+        samplingRateValue = fs
+    }
+
     private fun updateFsFromEventTimestamp(tsNanos: Long) {
+        // If batch mode with fixed FS, skip real-time calculation
+        if (forceFs != null) {
+            samplingRateValue = forceFs!!
+            lastAccelTsNanos = tsNanos
+            return
+        }
+
         if (lastAccelTsNanos > 0L) {
             val dtSec = ((tsNanos - lastAccelTsNanos).coerceAtLeast(1_000_000L)) / 1e9
             val instFs = 1.0 / dtSec
             emaFs = if (emaFs == 0.0) instFs else FS_EMA_ALPHA * instFs + (1 - FS_EMA_ALPHA) * emaFs
-            samplingRateValue = emaFs.toInt().coerceIn(10, 400)
-            if (configuration.filterType == 1 && configuration.cutoffFrequencyIndex != 3 && cutoffFrequencyValue != null) {
-                alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
+            
+            // Use stable sampling rate - only update if change is significant
+            val newSamplingRate = emaFs.toInt().coerceIn(10, 400)
+            val samplingRateChanged = kotlin.math.abs(newSamplingRate - samplingRateValue) > 2
+            
+            if (samplingRateChanged) {
+                samplingRateValue = newSamplingRate
+                // Recalculate alpha only when sampling rate actually changes
+                if (configuration.filterType == 1 && configuration.cutoffFrequencyIndex != 3 && cutoffFrequencyValue != null) {
+                    alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
+                }
             }
         }
         lastAccelTsNanos = tsNanos
@@ -332,6 +391,7 @@ class StepDetectionProcessor(
             accelerometer.filteredValues = filtered
             accelerometer.filteredResultant = calculations.resultant(filtered)
             val detectionResult = when (configuration.recognitionAlgorithm) {
+                0 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
                 1 -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
                 2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(accelerometer.filteredResultant, instant)
                 else -> keyPointDetection.recognizeLocalExtremaRealtime(accelerometer.filteredResultant, instant)
@@ -346,7 +406,13 @@ class StepDetectionProcessor(
         if (accelerometerEvent) {
             val magnitude = calculations.resultant(accelerometer.rawValues)
             accelerometer.resultant = magnitude
-            if (keyPointDetection.recognizeLocalExtremaRealtime(magnitude, instant)) {
+            val detectionResult = when (configuration.recognitionAlgorithm) {
+                0 -> keyPointDetection.recognizeLocalExtremaRealtime(magnitude, instant)
+                1 -> keyPointDetection.recognizeLocalExtremaRealtime(magnitude, instant)
+                2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(magnitude, instant)
+                else -> keyPointDetection.recognizeLocalExtremaRealtime(magnitude, instant)
+            }
+            if (detectionResult) {
                 stepDetected = stepDetection.detectStepByPeakDifference()
             }
         }
@@ -358,7 +424,13 @@ class StepDetectionProcessor(
             val fixedSystem = calculations.worldAcceleration(accelerometer.rawValues)
             accelerometer.worldValues = fixedSystem
             val zAxis = fixedSystem[2]
-            if (keyPointDetection.recognizeLocalExtremaRealtime(zAxis, instant)) {
+            val detectionResult = when (configuration.recognitionAlgorithm) {
+                0 -> keyPointDetection.recognizeLocalExtremaRealtime(zAxis, instant)
+                1 -> keyPointDetection.recognizeLocalExtremaRealtime(zAxis, instant)
+                2 -> keyPointDetection.recognizeLocalExtremaTimeFiltering(zAxis, instant)
+                else -> keyPointDetection.recognizeLocalExtremaRealtime(zAxis, instant)
+            }
+            if (detectionResult) {
                 stepDetected = stepDetection.detectStepByPeakDifference()
             }
         }
@@ -408,54 +480,79 @@ class StepDetectionProcessor(
     }
 
     private fun handleStepDetection() {
-        if (configuration.recognitionAlgorithm == 2) {
-            checkTimeFilteringFalseStep()
-        }
-        if (configuration.filterType == 4 && configuration.falseStepDetectionEnabled) {
-            checkButterworthFalseStep()
-        }
+        // Reset false step flag at the beginning
+        falseStep = false
+        
+        // Only run false step detection if enabled
         if (configuration.falseStepDetectionEnabled) {
-            checkFalseStep()
+            // Check algorithm-specific false step conditions
+            when (configuration.recognitionAlgorithm) {
+                2 -> falseStep = checkTimeFilteringFalseStep()
+            }
+            
+            // Check filter-specific false step conditions
+            if (!falseStep && configuration.filterType == 4) {
+                falseStep = checkButterworthFalseStep()
+            }
+            
+            // Check general false step conditions
+            if (!falseStep) {
+                falseStep = checkGeneralFalseStep()
+            }
         }
+        
+        // Only increment step count if not a false step
         if (!falseStep) {
-            stepsCount++
+            _stepsCount.incrementAndGet()
             if (collectForCharts) {
                 lastAccelerationMagnitude?.let { magnitude ->
                     chartEntries.add(Entry(counter.toFloat(), magnitude.toFloat()))
+                    if (chartEntries.size > MAX_CHART_ENTRIES) {
+                        chartEntries.removeAt(0)
+                    }
                 }
             }
-        } else {
-            falseStep = false
         }
     }
 
-    private fun checkFalseStep() {
-        if (!configuration.falseStepDetectionEnabled) return
-        if (sumResMagn.isEmpty()) return
+    private fun checkGeneralFalseStep(): Boolean {
+        if (sumResMagn.isEmpty()) return false
         val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
         sumResMagn.clear()
         if (resLast4Steps.size < 4) {
             resLast4Steps.add(averageRes)
-            return
+            return false
         }
-        falseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
+        val isFalseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
         resLast4Steps.removeAt(0)
         resLast4Steps.add(averageRes)
+        return isFalseStep
     }
 
-    private fun checkTimeFilteringFalseStep() {
-        if (configuration.recognitionAlgorithm == 2) {
-            val aNPeakValley = configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime
-            val aN1PeakValley = configuration.exMax!! - configuration.exMin!!
-            val diff = kotlin.math.abs(aNPeakValley.toDouble() - aN1PeakValley.toDouble())
-            falseStep = (diff == 0.0)
-        }
+    private fun checkTimeFilteringFalseStep(): Boolean {
+        // Controllo di sicurezza: verifica che i parametri temporali siano inizializzati
+        val exMaxSafe = configuration.exMax ?: return false
+        val exMinSafe = configuration.exMin ?: return false
+        
+        val cur = kotlin.math.abs(configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime)
+        val old = kotlin.math.abs(exMaxSafe - exMinSafe)
+        
+        // Controlli di robustezza aggiuntivi
+        if (old == 0L || cur < 10L) return false  // Evita divisioni per zero e tempi troppo piccoli
+        if (cur > 5000L || old > 5000L) return true  // Passi troppo lunghi (>5s) sono probabilmente falsi
+        
+        val rel = kotlin.math.abs(cur - old).toDouble() / old.toDouble()
+        // Correzione CRITICA: soglia aumentata da 0.35 a 0.55 per ridurre falsi positivi
+        // La soglia 0.35 era troppo bassa e causava perdita eccessiva di passi validi
+        return rel > 0.55  // 55% di variazione: più permissiva per camminata naturale
     }
 
-    private fun checkButterworthFalseStep() {
-        if (configuration.filterType != 4 || !configuration.falseStepDetectionEnabled) return
+
+    private fun checkButterworthFalseStep(): Boolean {
         val magnN = configuration.lastLocalMaxAccel.toDouble() - configuration.lastLocalMinAccel.toDouble()
-        if (oldMagn != 0.0) {
+        var isFalseStep = false
+        
+        if (oldMagn != 0.0 && configuration.exMax != null && configuration.exMin != null) {
             val diffMagn = kotlin.math.abs(magnN - oldMagn)
             val eps = 1e-6
             val fi2 = if (diffMagn > eps) kotlin.math.abs(kotlin.math.ceil(samplingRateValue / diffMagn * 2.0)) else Double.POSITIVE_INFINITY
@@ -463,26 +560,24 @@ class StepDetectionProcessor(
                 (configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime).toDouble() -
                         (configuration.exMax!! - configuration.exMin!!).toDouble()
             )
-            if (!falseStep && fi2 > 180.0 && timeDiff < 2.1) {
-                falseStep = true
+            if (fi2 > 180.0 && timeDiff < 2.1) {
+                isFalseStep = true
             }
             cutoffSelected = when {
-                fi2 < 81.0 -> (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it }
-                fi2 < 183.0 -> (samplingRateValue / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it }
-                else -> 0.0
+                fi2 < 81.0 -> kotlin.math.max(1.0, (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it })
+                fi2 < 183.0 -> kotlin.math.max(1.0, (samplingRateValue / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it })
+                else -> 1.0  // Never allow 0, minimum 1.0 Hz
             }
         }
         oldMagn = magnN
+        return isFalseStep
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {
-        val samplingFreq = BigDecimal.ONE.divide(BigDecimal.valueOf(samplingRate.toLong()), MathContext.DECIMAL32)
-        val cutoffFreq = BigDecimal.ONE.divide(
-            BigDecimal.valueOf(2).multiply(BigDecimal.valueOf(Math.PI), MathContext.DECIMAL32)
-                .multiply(BigDecimal.valueOf(cutoffFrequency.toLong()), MathContext.DECIMAL32),
-            MathContext.DECIMAL32
-        )
-        return samplingFreq.divide(samplingFreq.add(cutoffFreq), MathContext.DECIMAL32)
+        val fs = BigDecimal.valueOf(samplingRate.toLong())
+        val fc = BigDecimal.valueOf(cutoffFrequency.toLong())
+        // α = fc / (fc + Fs)
+        return fc.divide(fc.add(fs), MathContext.DECIMAL32)
     }
 
     private fun getFilteredValueForChart(): BigDecimal {

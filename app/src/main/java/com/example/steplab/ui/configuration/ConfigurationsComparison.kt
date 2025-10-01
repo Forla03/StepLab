@@ -4,8 +4,10 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Bundle
 import android.view.View
-import android.widget.Button
-import android.widget.ProgressBar
+import android.widget.*
+import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -13,7 +15,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.*
-import com.example.steplab.data.local.EntityTest
+import com.example.steplab.data.local.*
+import com.example.steplab.ui.test.SavedTests
 import com.example.steplab.ui.test.SelectTest
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
@@ -37,6 +40,8 @@ class ConfigurationsComparison : AppCompatActivity() {
     private lateinit var chart: LineChart
     private lateinit var startButton: Button
     private lateinit var selectTestButton: Button
+    private lateinit var saveButton: Button
+    private lateinit var buttonsLayout: LinearLayout
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
 
@@ -46,6 +51,7 @@ class ConfigurationsComparison : AppCompatActivity() {
     private val myLines = arrayListOf<LineDataSet>()
     private lateinit var chartData: LineData
     private var counter = 0
+    private var isViewMode = false // True when viewing saved configurations
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +59,7 @@ class ConfigurationsComparison : AppCompatActivity() {
 
         configurations = intent.getSerializableExtra("configurations") as ArrayList<Configuration>
         val testId = intent.getSerializableExtra("test") as String
+        isViewMode = intent.getBooleanExtra("viewMode", false)
 
         lifecycleScope.launch(Dispatchers.IO) {
             testApp = MainActivity.getDatabase()?.databaseDao()?.getTestFromId(testId.toInt())
@@ -69,10 +76,19 @@ class ConfigurationsComparison : AppCompatActivity() {
         }
 
         onBackPressedDispatcher.addCallback(this){
-            startActivity(
-                Intent(applicationContext, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            )
+            if (isViewMode) {
+                // If in view mode, go back to SavedTests activity
+                startActivity(
+                    Intent(applicationContext, SavedTests::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                )
+            } else {
+                // Normal mode, go back to MainActivity
+                startActivity(
+                    Intent(applicationContext, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+                )
+            }
         }
     }
 
@@ -81,7 +97,14 @@ class ConfigurationsComparison : AppCompatActivity() {
         recyclerView = findViewById(R.id.recycler_view)
         startButton = findViewById(R.id.start_new_comparison)
         selectTestButton = findViewById(R.id.select_another_test)
+        saveButton = findViewById(R.id.save_comparison)
+        buttonsLayout = findViewById(R.id.buttons_layout)
         progressBar = findViewById(R.id.progress_bar)
+
+        // Hide entire buttons layout if in view mode
+        if (isViewMode) {
+            buttonsLayout.visibility = View.GONE
+        }
 
         startButton.setOnClickListener {
             startActivity(
@@ -95,6 +118,9 @@ class ConfigurationsComparison : AppCompatActivity() {
                     .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     .putExtra("configurations", configurations)
             )
+        }
+        saveButton.setOnClickListener {
+            showSaveDialog()
         }
     }
 
@@ -182,6 +208,14 @@ class ConfigurationsComparison : AppCompatActivity() {
         chart.invalidate()
     }
 
+    private fun estimateFsFromJson(json: JSONObject): Int {
+        val keys = json.keys().asSequence().map { it.toLong() }.sorted().toList()
+        if (keys.size < 3) return 50
+        val dtMsAvg = (keys.last() - keys.first()).toDouble() / (keys.size - 1).coerceAtLeast(1)
+        val fs = (1000.0 / dtMsAvg).toInt().coerceIn(30, 200)
+        return fs
+    }
+
     private fun processConfigurationsSync() {
         // Show progress bar
         progressBar.visibility = View.VISIBLE
@@ -198,14 +232,18 @@ class ConfigurationsComparison : AppCompatActivity() {
                     val configColor = colors[i % colors.size]
                     val context = ConfigurationContext(clonedConfig, i)
 
+                    // Estimate and set FS for batch processing to ensure consistent frequency calculation
+                    val fsBatch = estimateFsFromJson(jsonObject)
+                    context.setFsForBatch(fsBatch)
+
                     if (clonedConfig.autocorcAlg) {
                         context.processAutocorrelationAlgorithm()
                     } else {
-                        val keys = jsonObject.keys()
+                        // Sort keys by timestamp to ensure temporal order - CRITICAL for step detection algorithms
+                        val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
                         var processedEvents = 0
 
-                        while (keys.hasNext()) {
-                            val key = keys.next()
+                        for (key in keysSorted) {
                             val eventJson = jsonObject.getJSONObject(key)
                             context.myOnSensorChanged(key.toLong(), eventJson)
 
@@ -291,6 +329,72 @@ class ConfigurationsComparison : AppCompatActivity() {
 
         fun myOnSensorChanged(instant: Long, eventJson: JSONObject) {
             stepDetectionProcessor.processBatchSensorData(instant, eventJson)
+        }
+
+        fun setFsForBatch(fs: Int) {
+            stepDetectionProcessor.setFixedFsForBatch(fs)
+        }
+    }
+
+    private fun showSaveDialog() {
+        val editText = EditText(this).apply {
+            hint = getString(R.string.enter_unique_name)
+            setPadding(50, 20, 50, 20)
+        }
+
+        AlertDialog.Builder(this)
+            .setTitle(getString(R.string.save_configuration_comparison))
+            .setView(editText)
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                val name = editText.text.toString().trim()
+                if (name.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.name_required), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                
+                // Save the configuration comparison
+                saveConfigurationComparison(name)
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+
+    private fun saveConfigurationComparison(name: String) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                val database = MainActivity.getDatabase()
+                
+                // Check if name already exists
+                val existing = database?.databaseDao()?.getSavedConfigurationComparisonByName(name)
+                if (existing != null) {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@ConfigurationsComparison, getString(R.string.name_already_exists), Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+
+                // Serialize configurations
+                val configurationsJson = ConfigurationSerializer.serializeConfigurations(configurations)
+
+                // Create saved entity
+                val savedComparison = EntitySavedConfigurationComparison(
+                    name = name,
+                    testId = testApp.testId,
+                    testName = testApp.fileName ?: "Unknown Test",
+                    configurationsJson = configurationsJson
+                )
+
+                // Save to database
+                database?.databaseDao()?.insertSavedConfigurationComparison(savedComparison)
+
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ConfigurationsComparison, getString(R.string.comparison_saved), Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@ConfigurationsComparison, "Error saving: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 }
