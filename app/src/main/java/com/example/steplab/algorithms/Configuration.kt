@@ -38,14 +38,23 @@ data class Configuration(
     var continuousBagileviDetection: Boolean = false,
     /** Threshold value for step detection */
     var detectionThreshold: BigDecimal = BigDecimal.ZERO,
-    /** Time-filtering: previous peak (ExMax) */
+    
+    // ===== TIME FILTERING VARIABLES =====
+    // These variables maintain temporal history for adaptive peak/valley filtering.
+    // Used by recognizeLocalExtremaTimeFiltering() to ensure detected steps follow
+    // consistent temporal patterns and filter out false positives.
+    
+    /** Time-filtering: timestamp (ms) of the most recent detected peak */
     var exMax: Long? = 0L,
-    /** Time-filtering: two peaks ago (ExExMax) */
+    /** Time-filtering: timestamp (ms) of the second most recent detected peak */
     var exExMax: Long? = 0L,
-    /** Time-filtering: previous valley (ExMin) */
+    /** Time-filtering: timestamp (ms) of the most recent detected valley */
     var exMin: Long? = 0L,
-    /** Time-filtering: two valleys ago (ExExMin) */
+    /** Time-filtering: timestamp (ms) of the second most recent detected valley */
     var exExMin: Long? = 0L,
+    
+    // ===== PEAK/VALLEY TUNING VARIABLES =====
+    
     /** Magnitude of previous local maximum (used for peak tuning) */
     var previousLocalMax: BigDecimal = BigDecimal.ZERO,
     /** Magnitude of previous local minimum (used for valley tuning) */

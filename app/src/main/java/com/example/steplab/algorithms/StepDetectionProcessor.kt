@@ -3,14 +3,10 @@ package com.example.steplab.algorithms
 import com.github.mikephil.charting.data.Entry
 import org.json.JSONObject
 import java.math.BigDecimal
-import java.math.MathContext
-import java.util.*
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.pow
 import kotlin.math.floor
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sqrt
 
 class StepDetectionProcessor(
@@ -61,7 +57,6 @@ class StepDetectionProcessor(
     // Memory management constants
     private val MAX_CHART_ENTRIES = 2000
     private val MAX_SUM_RES_MAGN = 1000
-    private var countFour = 0
     private val resLast4Steps = mutableListOf<Float>()
     // Thread-safe atomic boolean for false step detection
     private val _falseStep = AtomicBoolean(false)
@@ -77,7 +72,6 @@ class StepDetectionProcessor(
     private var oldMagn = 0.0
 
     private val recordList = mutableListOf<Sample>()
-    private var startingPoint = 0L
 
     private val reusableValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
     private val reusableXAxisValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
@@ -87,32 +81,90 @@ class StepDetectionProcessor(
 
     private var lastAccelTsNanos: Long = -1L
     private var emaFs: Double = 0.0
-    private val FS_EMA_ALPHA = 0.2
     private var collectForCharts = false
     private var forceFs: Int? = null
+    
+    // Java-aligned frequency sampling logic variables
+    private var currentSecond: Int = -1
+    private var firstCurrentSecond: Int = -1
+    private var numberOfSensorEvents: Int = 0
 
     init {
         initializeConfiguration()
     }
 
+    /*
+     * Reset all filter states to prevent contamination between tests
+     */
+    fun resetFilterStates() {
+        filters.resetFilterState()
+        
+        // Reset step counter and other state
+        _stepsCount.set(0)
+        counter = 0
+        chartEntries.clear()
+        lastAccelTsNanos = -1L
+        emaFs = 0.0
+        firstSignal = true
+        lastAccelerationMagnitude = null
+        
+        // Reset Java-aligned frequency sampling variables
+        currentSecond = -1
+        firstCurrentSecond = -1
+        numberOfSensorEvents = 0
+        
+        // Clear sensor data
+        sumResMagn.clear()
+        resLast4Steps.clear()
+        last3Acc.clear()
+        recordList.clear()
+        
+        oldMagn = 0.0
+        s = 0
+        sOld = 0
+    }
+
     private fun initializeConfiguration() {
         configuration.lastDetectedStepTime = 0L
         configuration.lastStepSecondPhaseTime = 0L
-        val cutoffFrequencyIndex = configuration.cutoffFrequencyIndex
-        if (cutoffFrequencyIndex == 3) {
-            alpha = BigDecimal("0.1")
+
+        // Set threshold based on filter type
+        when (configuration.filterType) {
+            1 -> configuration.detectionThreshold = BigDecimal.valueOf(5) // Low Pass Filter
+            2 -> configuration.detectionThreshold = BigDecimal.valueOf(5) // No Filter  
+            3 -> configuration.detectionThreshold = BigDecimal.valueOf(8) // Rotation Matrix
+            0 -> {
+                // Keep current value or set to a default if needed
+                if (configuration.detectionThreshold == BigDecimal.ZERO) {
+                    configuration.detectionThreshold = BigDecimal.valueOf(5) // Safe default
+                }
+            }
+            else -> {
+                // Default fallback
+                if (configuration.detectionThreshold == BigDecimal.ZERO) {
+                    configuration.detectionThreshold = BigDecimal.valueOf(5)
+                }
+            }
+        }
+        
+        val idx = configuration.cutoffFrequencyIndex
+        if (configuration.filterType == 1) {
+            if (idx == 3) {
+                // Cutoff = 2% sampling rate
+                // Calculate dynamically when fs is available
+                val initialFs = if (samplingRateValue > 0) samplingRateValue else 50
+                cutoffFrequencyValue = (initialFs * 0.02).toInt().coerceAtLeast(1)
+                alpha = calculateAlpha(initialFs, cutoffFrequencyValue!!)
+            } else {
+                cutoffFrequencyValue = when (idx) { 0 -> 2; 1 -> 3; 2 -> 10; else -> 3 }
+                // starting alpha, will be correct when calculate
+                alpha = calculateAlpha(
+                    if (samplingRateValue > 0) samplingRateValue else 50,
+                    cutoffFrequencyValue ?: 3
+                )
+            }
         } else {
-            cutoffFrequencyValue = when (cutoffFrequencyIndex) {
-                0 -> 2
-                1 -> 3
-                2 -> 10
-                else -> 3
-            }
-            samplingRateValue = 0
-            firstSignal = true
-            if (configuration.filterType == 1 && cutoffFrequencyValue != null) {
-                alpha = calculateAlpha(50, cutoffFrequencyValue!!)
-            }
+            cutoffFrequencyValue = when (idx) { 0 -> 2; 1 -> 3; 2 -> 10; else -> 3 }
         }
     }
 
@@ -128,20 +180,20 @@ class StepDetectionProcessor(
                 reusableValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                reusableXAxisValues[0] = reusableValues[0]
-                reusableXAxisValues[1] = reusableValues[1]
-                reusableXAxisValues[2] = reusableValues[2]
-                accelerometer.rawValues = reusableValues
-                accelerometerXAxis.rawValues = reusableXAxisValues
-                lastAccelerationMagnitude = calculations.resultant(reusableValues)
-                updateFsFromEventTimestamp(timestamp)
+                
+                //Create separate copies for each sensor to avoid shared references
+                accelerometer.rawValues = arrayOf(reusableValues[0], reusableValues[1], reusableValues[2])
+                accelerometerXAxis.rawValues = arrayOf(reusableValues[0], reusableValues[1], reusableValues[2])
+                lastAccelerationMagnitude = calculations.resultant(accelerometer.rawValues)
+                
             }
             android.hardware.Sensor.TYPE_MAGNETIC_FIELD -> {
                 accelerometerEvent = false
                 reusableMagnetometerValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableMagnetometerValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableMagnetometerValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                magnetometer.rawValues = reusableMagnetometerValues
+                // Create copy for magnetometer
+                magnetometer.rawValues = arrayOf(reusableMagnetometerValues[0], reusableMagnetometerValues[1], reusableMagnetometerValues[2])
             }
             android.hardware.Sensor.TYPE_GRAVITY -> {
                 accelerometerEvent = false
@@ -155,7 +207,8 @@ class StepDetectionProcessor(
                 reusableRotationValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableRotationValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableRotationValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                rotation.rawValues = reusableRotationValues
+                // Create copy for rotation vector
+                rotation.rawValues = arrayOf(reusableRotationValues[0], reusableRotationValues[1], reusableRotationValues[2])
             }
         }
         if (accelerometerEvent) {
@@ -187,6 +240,9 @@ class StepDetectionProcessor(
         collectForCharts = true
         try {
             if (eventJson.has("acceleration_x")) {
+                //Update fs whit ms of the key
+                updateFsFromMillis(instant)
+                
                 counter++
                 lastAccelerationMagnitude = BigDecimal(eventJson.getString("acceleration_magnitude"))
                 accelerometerEvent = true
@@ -195,8 +251,9 @@ class StepDetectionProcessor(
                     BigDecimal(eventJson.getString("acceleration_y")),
                     BigDecimal(eventJson.getString("acceleration_z"))
                 )
-                accelerometer.rawValues = vector
-                accelerometerXAxis.rawValues = vector
+                //Create separate copies for each sensor
+                accelerometer.rawValues = arrayOf(vector[0], vector[1], vector[2])
+                accelerometerXAxis.rawValues = arrayOf(vector[0], vector[1], vector[2])
             } else if (eventJson.has("magnetometer_x")) {
                 accelerometerEvent = false
                 magnetometer.rawValues = arrayOf(
@@ -318,11 +375,55 @@ class StepDetectionProcessor(
     }
 
     /**
-     * Public wrapper to update frequency sampling using nanoseond timestamp from sensor events.
-     * Use this to provide the real sensor timestamp in nanoseconds for accurate frequency calculation.
+     * @deprecated Use updateFsFromMillis() instead for Java-aligned behavior.
+     * Public wrapper to update frequency sampling using nanosecond timestamp from sensor events.
+     * This method is deprecated in favor of updateFsFromMillis() which uses the same 
+     * Java-like per-second counting logic for both batch and live modes.
      */
+    @Deprecated("Use updateFsFromMillis() for consistent Java-aligned Fs calculation")
     fun updateFsFromNs(ns: Long) {
         updateFsFromEventTimestamp(ns)
+    }
+
+    fun updateFsFromMillis(ms: Long) {
+        if (forceFs != null) {
+            samplingRateValue = forceFs!!
+            return
+        }
+
+        val currentSec = ((ms / 1000L).toInt()) % 60
+
+        if (firstCurrentSecond == -1) {
+            firstCurrentSecond = currentSec
+            currentSecond = currentSec
+            numberOfSensorEvents = 0
+            return
+        }
+
+        if (currentSec != firstCurrentSecond) {
+            if (currentSec == currentSecond) {
+                numberOfSensorEvents++
+            } else {
+                // 1) update fs with the last second
+                samplingRateValue = numberOfSensorEvents.coerceAtLeast(1)
+
+                // 2) calculate dynamically
+                if (configuration.filterType == 1) {
+                    if (configuration.cutoffFrequencyIndex == 3) {
+                        // Cutoff = 2%
+                        cutoffFrequencyValue = (samplingRateValue * 0.02).toInt().coerceAtLeast(1)
+                        alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
+                    } else {
+                        val cutoff = cutoffFrequencyValue ?: 3
+                        alpha = calculateAlpha(samplingRateValue, cutoff)
+                    }
+                }
+
+                // 3) reset
+                currentSecond = currentSec
+                numberOfSensorEvents = 0
+            }
+        }
     }
 
     /**
@@ -334,32 +435,35 @@ class StepDetectionProcessor(
         samplingRateValue = fs
     }
 
-    private fun updateFsFromEventTimestamp(tsNanos: Long) {
-        // If batch mode with fixed FS, skip real-time calculation
-        if (forceFs != null) {
-            samplingRateValue = forceFs!!
-            lastAccelTsNanos = tsNanos
-            return
-        }
-
-        if (lastAccelTsNanos > 0L) {
-            val dtSec = ((tsNanos - lastAccelTsNanos).coerceAtLeast(1_000_000L)) / 1e9
-            val instFs = 1.0 / dtSec
-            emaFs = if (emaFs == 0.0) instFs else FS_EMA_ALPHA * instFs + (1 - FS_EMA_ALPHA) * emaFs
-            
-            // Use stable sampling rate - only update if change is significant
-            val newSamplingRate = emaFs.toInt().coerceIn(10, 400)
-            val samplingRateChanged = kotlin.math.abs(newSamplingRate - samplingRateValue) > 2
-            
-            if (samplingRateChanged) {
-                samplingRateValue = newSamplingRate
-                // Recalculate alpha only when sampling rate actually changes
-                if (configuration.filterType == 1 && configuration.cutoffFrequencyIndex != 3 && cutoffFrequencyValue != null) {
-                    alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
-                }
+    /**
+     * Set initial sampling frequency from configured value.
+     * This ensures alpha is calculated with the correct Fs from the start.
+     */
+    fun setInitialSamplingFrequency(fs: Int) {
+        samplingRateValue = fs
+        // Recalculate alpha with the correct initial sampling rate
+        if (configuration.filterType == 1) {
+            if (configuration.cutoffFrequencyIndex == 3) {
+                // For 2% sampling rate: recalculate both cutoff and alpha
+                cutoffFrequencyValue = (samplingRateValue * 0.02).toInt().coerceAtLeast(1)
+                alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
+            } else {
+                // CRITICAL FIX: Use fixed cutoff frequency like Java implementation
+                val cutoff = cutoffFrequencyValue!!
+                alpha = calculateAlpha(samplingRateValue, cutoff)
             }
         }
+    }
+
+    /**
+     * @deprecated This method using nanosecond timestamps is no longer used.
+     * The application now uses updateFsFromMillis() for both batch and live modes
+     * to ensure consistent Java-aligned behavior with per-second event counting.
+     */
+    @Deprecated("Replaced by updateFsFromMillis() for Java-aligned behavior")
+    private fun updateFsFromEventTimestamp(tsNanos: Long) {
         lastAccelTsNanos = tsNanos
+        return
     }
 
     private fun processFiltersAndDetection(instant: Long) {
@@ -374,6 +478,9 @@ class StepDetectionProcessor(
 
     private fun applyBagileviFilter(instant: Long) {
         if (accelerometerEvent) {
+            if (configuration.falseStepDetectionEnabled) {
+                calculateMagnetometerMagnitude()
+            }
             val filtered = filters.bagileviFilter(accelerometer.rawValues)
             accelerometer.filteredResultant = filtered
             val peak = keyPointDetection.recognizeLocalExtremaRealtimeBagilevi(filtered, instant)
@@ -386,7 +493,13 @@ class StepDetectionProcessor(
             if (configuration.falseStepDetectionEnabled) {
                 calculateMagnetometerMagnitude()
             }
-            val aLocal = if (configuration.cutoffFrequencyIndex == 3) alpha!! else (alpha ?: calculateAlpha(max(samplingRateValue, 50), cutoffFrequencyValue!!))
+            // Use the pre-calculated alpha value that's updated only when Fs changes
+            // This ensures cutoff frequency remains fixed (except for 2% mode)
+            val aLocal = alpha ?: calculateAlpha(
+                samplingRateValue.takeIf { it > 0 } ?: 50,
+                cutoffFrequencyValue ?: 3
+            )
+
             val filtered = filters.lowPassFilter(accelerometer.rawValues, aLocal)
             accelerometer.filteredValues = filtered
             accelerometer.filteredResultant = calculations.resultant(filtered)
@@ -404,6 +517,9 @@ class StepDetectionProcessor(
 
     private fun applyNoFilter(instant: Long) {
         if (accelerometerEvent) {
+            if (configuration.falseStepDetectionEnabled) {
+                calculateMagnetometerMagnitude()
+            }
             val magnitude = calculations.resultant(accelerometer.rawValues)
             accelerometer.resultant = magnitude
             val detectionResult = when (configuration.recognitionAlgorithm) {
@@ -420,6 +536,9 @@ class StepDetectionProcessor(
 
     private fun applyRotationMatrixFilter(instant: Long) {
         if (accelerometer.instantiated && magnetometer.instantiated) {
+            if (configuration.falseStepDetectionEnabled) {
+                calculateMagnetometerMagnitude()
+            }
             calculations.updateRotationMatrix(accelerometer.rawValues, magnetometer.rawValues)
             val fixedSystem = calculations.worldAcceleration(accelerometer.rawValues)
             accelerometer.worldValues = fixedSystem
@@ -441,7 +560,12 @@ class StepDetectionProcessor(
             if (configuration.falseStepDetectionEnabled) {
                 calculateMagnetometerMagnitude()
             }
-            val fsLocal = if (samplingRateValue > 0) samplingRateValue else 50
+            //Ensure sampling rate is valid before using it
+            // Wait for at least 2 seconds of data to get a stable Fs estimate
+            val fsLocal = if (samplingRateValue > 10) samplingRateValue else {
+                // Skip processing until we have a reliable sampling rate
+                return
+            }
             val filtered = filters.butterworthFilter(accelerometer.rawValues, cutoffSelected, fsLocal)
             accelerometer.filteredValues = filtered
             accelerometer.filteredResultant = calculations.resultant(filtered)
@@ -459,6 +583,7 @@ class StepDetectionProcessor(
 
     private fun applyIntersectionCorrection(instant: Long) {
         if (accelerometerEvent) {
+            // Use separate calculation to avoid shared state issues
             val magnitude = calculations.resultant(accelerometerXAxis.rawValues)
             accelerometerXAxis.resultant = magnitude
             val linear = calculations.linearAcceleration(magnitude)
@@ -485,17 +610,16 @@ class StepDetectionProcessor(
         
         // Only run false step detection if enabled
         if (configuration.falseStepDetectionEnabled) {
-            // Check algorithm-specific false step conditions
+            // Check algorithm-specific false step conditions first
             when (configuration.recognitionAlgorithm) {
                 2 -> falseStep = checkTimeFilteringFalseStep()
             }
             
-            // Check filter-specific false step conditions
+            // Check filter-specific false step conditions for Butterworth
             if (!falseStep && configuration.filterType == 4) {
                 falseStep = checkButterworthFalseStep()
             }
             
-            // Check general false step conditions
             if (!falseStep) {
                 falseStep = checkGeneralFalseStep()
             }
@@ -519,10 +643,22 @@ class StepDetectionProcessor(
         if (sumResMagn.isEmpty()) return false
         val averageRes = calculations.sumOfMagnet(sumResMagn) / sumResMagn.size
         sumResMagn.clear()
+        
+        // Don't always allow the first 4 steps
+        // Gather data but check also the first 4 steps
         if (resLast4Steps.size < 4) {
             resLast4Steps.add(averageRes)
+            if (resLast4Steps.size >= 2) {
+                val current = averageRes
+                val previous = resLast4Steps[resLast4Steps.size - 2]
+                val diff = kotlin.math.abs(current - previous)
+                if (diff > 3.6f) {
+                    return true
+                }
+            }
             return false
         }
+        
         val isFalseStep = calculations.checkFalseStep(resLast4Steps, averageRes)
         resLast4Steps.removeAt(0)
         resLast4Steps.add(averageRes)
@@ -530,21 +666,23 @@ class StepDetectionProcessor(
     }
 
     private fun checkTimeFilteringFalseStep(): Boolean {
-        // Controllo di sicurezza: verifica che i parametri temporali siano inizializzati
         val exMaxSafe = configuration.exMax ?: return false
         val exMinSafe = configuration.exMin ?: return false
         
+        // Skip validation for initial values (not yet properly initialized)
+        if (exMaxSafe <= 0L || exMinSafe <= 0L) return false
+        
+        // Calculate time intervals for current and previous steps
         val cur = kotlin.math.abs(configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime)
         val old = kotlin.math.abs(exMaxSafe - exMinSafe)
+
+        if (old == 0L || cur < 10L) return false
+        if (cur > 5000L || old > 5000L) return true
         
-        // Controlli di robustezza aggiuntivi
-        if (old == 0L || cur < 10L) return false  // Evita divisioni per zero e tempi troppo piccoli
-        if (cur > 5000L || old > 5000L) return true  // Passi troppo lunghi (>5s) sono probabilmente falsi
-        
+        // Check relative variation between current and previous step intervals
         val rel = kotlin.math.abs(cur - old).toDouble() / old.toDouble()
-        // Correzione CRITICA: soglia aumentata da 0.35 a 0.55 per ridurre falsi positivi
-        // La soglia 0.35 era troppo bassa e causava perdita eccessiva di passi validi
-        return rel > 0.55  // 55% di variazione: più permissiva per camminata naturale
+        // If greater than 40% is false
+        return rel > 0.40
     }
 
 
@@ -555,7 +693,8 @@ class StepDetectionProcessor(
         if (oldMagn != 0.0 && configuration.exMax != null && configuration.exMin != null) {
             val diffMagn = kotlin.math.abs(magnN - oldMagn)
             val eps = 1e-6
-            val fi2 = if (diffMagn > eps) kotlin.math.abs(kotlin.math.ceil(samplingRateValue / diffMagn * 2.0)) else Double.POSITIVE_INFINITY
+            val safeSamplingRate = samplingRateValue.coerceAtLeast(1)
+            val fi2 = if (diffMagn > eps) kotlin.math.abs(kotlin.math.ceil(safeSamplingRate / diffMagn * 2.0)) else Double.POSITIVE_INFINITY
             val timeDiff = kotlin.math.abs(
                 (configuration.lastStepFirstPhaseTime - configuration.lastStepSecondPhaseTime).toDouble() -
                         (configuration.exMax!! - configuration.exMin!!).toDouble()
@@ -564,8 +703,8 @@ class StepDetectionProcessor(
                 isFalseStep = true
             }
             cutoffSelected = when {
-                fi2 < 81.0 -> kotlin.math.max(1.0, (samplingRateValue / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it })
-                fi2 < 183.0 -> kotlin.math.max(1.0, (samplingRateValue / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it })
+                fi2 < 81.0 -> kotlin.math.max(1.0, (safeSamplingRate / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it })
+                fi2 < 183.0 -> kotlin.math.max(1.0, (safeSamplingRate / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it })
                 else -> 1.0  // Never allow 0, minimum 1.0 Hz
             }
         }
@@ -574,10 +713,26 @@ class StepDetectionProcessor(
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {
-        val fs = BigDecimal.valueOf(samplingRate.toLong())
-        val fc = BigDecimal.valueOf(cutoffFrequency.toLong())
-        // α = fc / (fc + Fs)
-        return fc.divide(fc.add(fs), MathContext.DECIMAL32)
+        if (samplingRate <= 0) {
+            return calculateAlpha(50, cutoffFrequency)
+        }
+        if (cutoffFrequency <= 0) { 
+            return calculateAlpha(samplingRate, 3)
+        }
+        
+        // For EMA: alpha = 2π * fc * dt / (1 + 2π * fc * dt)
+        // where dt = 1/fs is sampling rate
+        
+        val dt = 1.0 / samplingRate.toDouble()  // samppling period
+        val rc = 1.0 / (2.0 * Math.PI * cutoffFrequency.toDouble())  // Time constant RC
+
+        // alpha = dt / (RC + dt)
+        val alphaValue = dt / (rc + dt)
+        
+        // Clamp alpha between 0 and 1 for stability
+        val clampedAlpha = alphaValue.coerceIn(0.0, 1.0)
+        
+        return BigDecimal.valueOf(clampedAlpha)
     }
 
     private fun getFilteredValueForChart(): BigDecimal {

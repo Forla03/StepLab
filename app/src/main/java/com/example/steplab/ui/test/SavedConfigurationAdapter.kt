@@ -68,7 +68,7 @@ class SavedConfigurationAdapter(
                                 0 -> "2Hz"
                                 1 -> "3Hz" 
                                 2 -> "10Hz"
-                                3 -> "α=0.1"
+                                3 -> "2% Sampling Rate"
                                 else -> "Unknown"
                             }
                             text += " ($freqText)"

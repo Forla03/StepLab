@@ -59,7 +59,20 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     }
 
     private fun initializeWithConfiguration() {
+        // Istanzia il processor (sempre Java-like con millisecondi)
         stepDetectionProcessor = StepDetectionProcessor(configuration)
+        
+        // Mappa l'indice alla Fs in Hz 
+        val fsConfiguredHz = when (configuration.samplingFrequencyIndex) {
+            0 -> 20
+            1 -> 40
+            2 -> 50
+            3 -> 100
+            else -> 250 
+        }
+        // Passa la Fs iniziale al processor
+        stepDetectionProcessor.setInitialSamplingFrequency(fsConfiguredHz)
+        
         stepCount = 0
         counter = 0
     }
@@ -104,15 +117,10 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        // Use a slightly throttled sampling rate to balance performance and responsiveness
-        val actualSamplingRate = when {
-            samplingPeriodMicros == SensorManager.SENSOR_DELAY_FASTEST -> SensorManager.SENSOR_DELAY_GAME
-            samplingPeriodMicros < SensorManager.SENSOR_DELAY_UI -> SensorManager.SENSOR_DELAY_UI
-            else -> samplingPeriodMicros
-        }
-        sensorManager.registerListener(this, accelerometer, actualSamplingRate)
-        sensorManager.registerListener(this, magnetometer, actualSamplingRate)
-        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_UI)
+        // Register sensors with exact requested sampling rate 
+        sensorManager.registerListener(this, accelerometer, samplingPeriodMicros)
+        sensorManager.registerListener(this, magnetometer, samplingPeriodMicros)
+        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST)
     }
 
     override fun onPause() {
@@ -124,7 +132,8 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         val nowMs = System.currentTimeMillis()
 
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
-            stepDetectionProcessor.updateFsFromNs(event.timestamp)
+            // Allineamento Java: conta eventi per secondo via ms
+            stepDetectionProcessor.updateFsFromMillis(nowMs)
         }
 
         val result = stepDetectionProcessor.processRealTimeSensorData(

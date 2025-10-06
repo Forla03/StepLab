@@ -232,14 +232,12 @@ class ConfigurationsComparison : AppCompatActivity() {
                     val configColor = colors[i % colors.size]
                     val context = ConfigurationContext(clonedConfig, i)
 
-                    // Estimate and set FS for batch processing to ensure consistent frequency calculation
-                    val fsBatch = estimateFsFromJson(jsonObject)
-                    context.setFsForBatch(fsBatch)
-
                     if (clonedConfig.autocorcAlg) {
+                        val fsBatch = estimateFsFromJson(jsonObject)
+                        context.setFsForBatch(fsBatch)
                         context.processAutocorrelationAlgorithm()
                     } else {
-                        // Sort keys by timestamp to ensure temporal order - CRITICAL for step detection algorithms
+                        // Sort keys by timestamp to ensure temporal order
                         val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
                         var processedEvents = 0
 

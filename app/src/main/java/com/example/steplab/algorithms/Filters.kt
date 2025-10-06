@@ -10,13 +10,17 @@ import kotlin.math.max
 /**
  * Filtering utilities for the step-detection pipeline (IPIN 2019, Fig. 8).
  * Minimal comments in English as requested.
+ * 
+ * CRITICAL FIX: Separate filter state per sensor to prevent cross-contamination.
  */
 class Filters(
     private val configuration: Configuration
 ) {
     // ----- Legacy LP utilities (3D, BigDecimal) -----
-
-    private val filteredComponents = Array(3) { BigDecimal.ZERO }
+    // CRITICAL FIX: Use separate state for different sensors
+    private val accelerometerFilterState = Array(3) { BigDecimal.ZERO }
+    private val magnetometerFilterState = Array(3) { BigDecimal.ZERO }
+    private val rotationFilterState = Array(3) { BigDecimal.ZERO }
 
     private val butterworthFilters = Array(3) { Butterworth() }
     private var butterworthInitialized = false
@@ -28,15 +32,20 @@ class Filters(
         alpha: BigDecimal
     ): Array<BigDecimal> {
         for (i in input.indices) {
-            filteredComponents[i] = filteredComponents[i].add(
+            accelerometerFilterState[i] = accelerometerFilterState[i].add(
                 alpha.multiply(
-                    input[i].subtract(filteredComponents[i]),
+                    input[i].subtract(accelerometerFilterState[i]),
                     MathContext.DECIMAL32
                 ),
                 MathContext.DECIMAL32
             )
         }
-        return filteredComponents
+        // Return a copy to avoid shared references
+        return arrayOf(
+            accelerometerFilterState[0], 
+            accelerometerFilterState[1], 
+            accelerometerFilterState[2]
+        )
     }
 
     fun bagileviFilter(input: Array<BigDecimal>): BigDecimal {
@@ -69,12 +78,20 @@ class Filters(
             butterworthInitialized = true
             lastCutoff = cutoff
             lastSamplingRate = samplingRate
+            
+            //Warm-up the filter with the first input to avoid transient
+            // Feed the first value multiple times to stabilize the filter state
+            for (warmUpIteration in 0 until 10) {
+                for (axis in 0 until 3) {
+                    butterworthFilters[axis].filter(threeAxisVector[axis].toDouble())
+                }
+            }
         }
 
         for (i in 0 until 3) {
             val filteredValue = butterworthFilters[i].filter(threeAxisVector[i].toDouble())
             output[i] = BigDecimal.valueOf(filteredValue)
-            filteredComponents[i] = output[i]
+            accelerometerFilterState[i] = output[i]
         }
         return output
     }
@@ -89,11 +106,34 @@ class Filters(
         }
         for (i in 0..2) {
             butterworthFilters[i].lowPass(
-                1,            // order
+                2,            // order
                 sampleRate,
                 cutoff
             )
         }
+    }
+
+    fun resetFilterState() {
+        for (i in 0..2) {
+            accelerometerFilterState[i] = BigDecimal.ZERO
+            magnetometerFilterState[i] = BigDecimal.ZERO
+            rotationFilterState[i] = BigDecimal.ZERO
+        }
+        // Reset Butterworth filters completely to avoid transient spikes
+        butterworthInitialized = false
+        lastCutoff = -1.0
+        lastSamplingRate = -1
+        // Reinitialize the filter objects to clear internal state
+        for (i in 0..2) {
+            butterworthFilters[i] = Butterworth()
+        }
+        // Reset band-pass filter state
+        bp = Butterworth()
+        bpConfigured = false
+        bpLow = -1.0
+        bpHigh = -1.0
+        bpFs = -1
+        bpOrder = -1
     }
 
     // ----- Magnitude band-pass -----

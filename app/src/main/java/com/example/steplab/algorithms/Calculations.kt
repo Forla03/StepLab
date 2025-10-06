@@ -4,15 +4,13 @@ import android.hardware.SensorManager
 import java.math.BigDecimal
 import java.math.MathContext
 import org.jtransforms.fft.DoubleFFT_1D
-import kotlin.math.ceil
-import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 class Calculations(
     private val configuration: Configuration = Configuration(),
-    private val FALSE_STEP_THR:Float = 1.2f
+    private val FALSE_STEP_THR:Float = 0.8f
 ) {
 
     /** Resultant magnitude sqrt(x^2 + y^2 + z^2). */
