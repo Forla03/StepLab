@@ -72,6 +72,11 @@ class StepDetectionProcessor(
     private var oldMagn = 0.0
 
     private val recordList = mutableListOf<Sample>()
+    
+    private var lastSensorEventNs: Long = -1L
+    private var isIdle = false
+    private var settlingLeft = 0
+    private val IDLE_THRESHOLD_MS = 700L
 
     private val reusableValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
     private val reusableXAxisValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
@@ -174,14 +179,23 @@ class StepDetectionProcessor(
         timestamp: Long
     ): ProcessingResult {
         stepDetected = false
+        val nowNs = System.nanoTime()
+        
         when (sensorType) {
             android.hardware.Sensor.TYPE_ACCELEROMETER -> {
                 accelerometerEvent = true
+                
+                if (isIdle) {
+                    isIdle = false
+                    settlingLeft = calculateSettlingPeriod()
+                    primeFiltersWithCurrentValue(values)
+                }
+                lastSensorEventNs = nowNs
+                
                 reusableValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableValues[2] = BigDecimal.valueOf(values[2].toDouble())
                 
-                //Create separate copies for each sensor to avoid shared references
                 accelerometer.rawValues = arrayOf(reusableValues[0], reusableValues[1], reusableValues[2])
                 accelerometerXAxis.rawValues = arrayOf(reusableValues[0], reusableValues[1], reusableValues[2])
                 lastAccelerationMagnitude = calculations.resultant(accelerometer.rawValues)
@@ -192,7 +206,6 @@ class StepDetectionProcessor(
                 reusableMagnetometerValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableMagnetometerValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableMagnetometerValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                // Create copy for magnetometer
                 magnetometer.rawValues = arrayOf(reusableMagnetometerValues[0], reusableMagnetometerValues[1], reusableMagnetometerValues[2])
             }
             android.hardware.Sensor.TYPE_GRAVITY -> {
@@ -207,17 +220,28 @@ class StepDetectionProcessor(
                 reusableRotationValues[0] = BigDecimal.valueOf(values[0].toDouble())
                 reusableRotationValues[1] = BigDecimal.valueOf(values[1].toDouble())
                 reusableRotationValues[2] = BigDecimal.valueOf(values[2].toDouble())
-                // Create copy for rotation vector
                 rotation.rawValues = arrayOf(reusableRotationValues[0], reusableRotationValues[1], reusableRotationValues[2])
             }
         }
-        if (accelerometerEvent) {
+        
+        if (lastSensorEventNs > 0 && (nowNs - lastSensorEventNs) > (IDLE_THRESHOLD_MS * 1_000_000)) {
+            isIdle = true
+        }
+        
+        if (accelerometerEvent && !isIdle) {
+            val shouldMute = settlingLeft > 0
+            
             processFiltersAndDetection(timestamp)
-            // Apply intersection correction only for intersection algorithm (1), not for time filtering (2)
             if (configuration.recognitionAlgorithm == 1) {
                 applyIntersectionCorrection(timestamp)
             }
+            
+            if (shouldMute) {
+                stepDetected = false
+                settlingLeft--
+            }
         }
+        
         if (stepDetected) {
             handleStepDetection()
         } else {
@@ -692,6 +716,13 @@ class StepDetectionProcessor(
         
         if (oldMagn != 0.0 && configuration.exMax != null && configuration.exMin != null) {
             val diffMagn = kotlin.math.abs(magnN - oldMagn)
+            
+            if (diffMagn < 0.3) {
+                isFalseStep = true
+                oldMagn = magnN
+                return isFalseStep
+            }
+            
             val eps = 1e-6
             val safeSamplingRate = samplingRateValue.coerceAtLeast(1)
             val fi2 = if (diffMagn > eps) kotlin.math.abs(kotlin.math.ceil(safeSamplingRate / diffMagn * 2.0)) else Double.POSITIVE_INFINITY
@@ -702,14 +733,36 @@ class StepDetectionProcessor(
             if (fi2 > 180.0 && timeDiff < 2.1) {
                 isFalseStep = true
             }
-            cutoffSelected = when {
-                fi2 < 81.0 -> kotlin.math.max(1.0, (safeSamplingRate / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it })
-                fi2 < 183.0 -> kotlin.math.max(1.0, (safeSamplingRate / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it })
-                else -> 1.0  // Never allow 0, minimum 1.0 Hz
+            
+            val newCutoff = when {
+                fi2 < 81.0 -> kotlin.math.max(2.0, (safeSamplingRate / 6.0).let { if (timeDiff > 20.0) it / 2.5 else it })
+                fi2 < 183.0 -> kotlin.math.max(2.0, (safeSamplingRate / 7.0).let { if (timeDiff > 40.0) it / 2.857 else it })
+                else -> 2.5
+            }.coerceIn(2.0, safeSamplingRate / 3.0)
+            
+            if (kotlin.math.abs(newCutoff - cutoffSelected) > 1.0) {
+                cutoffSelected = newCutoff
             }
         }
         oldMagn = magnN
         return isFalseStep
+    }
+
+    private fun calculateSettlingPeriod(): Int {
+        val fs = samplingRateValue.coerceAtLeast(20)
+        val samples = kotlin.math.max((5.0 * fs / kotlin.math.max(0.5, cutoffSelected)).toInt(), 64)
+        return samples
+    }
+
+    private fun primeFiltersWithCurrentValue(values: FloatArray) {
+        if (configuration.filterType == 4) {
+            val seed = arrayOf(
+                BigDecimal.valueOf(values[0].toDouble()),
+                BigDecimal.valueOf(values[1].toDouble()),
+                BigDecimal.valueOf(values[2].toDouble())
+            )
+            filters.reinitializeButterworthWithSeed(seed, cutoffSelected, samplingRateValue)
+        }
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {

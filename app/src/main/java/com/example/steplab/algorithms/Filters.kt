@@ -11,13 +11,12 @@ import kotlin.math.max
  * Filtering utilities for the step-detection pipeline (IPIN 2019, Fig. 8).
  * Minimal comments in English as requested.
  * 
- * CRITICAL FIX: Separate filter state per sensor to prevent cross-contamination.
+ * Separate filter state per sensor to prevent cross-contamination.
  */
 class Filters(
     private val configuration: Configuration
 ) {
     // ----- Legacy LP utilities (3D, BigDecimal) -----
-    // CRITICAL FIX: Use separate state for different sensors
     private val accelerometerFilterState = Array(3) { BigDecimal.ZERO }
     private val magnetometerFilterState = Array(3) { BigDecimal.ZERO }
     private val rotationFilterState = Array(3) { BigDecimal.ZERO }
@@ -79,9 +78,8 @@ class Filters(
             lastCutoff = cutoff
             lastSamplingRate = samplingRate
             
-            //Warm-up the filter with the first input to avoid transient
-            // Feed the first value multiple times to stabilize the filter state
-            for (warmUpIteration in 0 until 10) {
+            val warmUpIterations = if (cutoff < 3.0) 50 else 15
+            for (warmUpIteration in 0 until warmUpIterations) {
                 for (axis in 0 until 3) {
                     butterworthFilters[axis].filter(threeAxisVector[axis].toDouble())
                 }
@@ -94,6 +92,24 @@ class Filters(
             accelerometerFilterState[i] = output[i]
         }
         return output
+    }
+
+    fun reinitializeButterworthWithSeed(
+        seed: Array<BigDecimal>,
+        cutoff: Double,
+        samplingRate: Int
+    ) {
+        initializeButterworthFilters(cutoff, samplingRate)
+        butterworthInitialized = true
+        lastCutoff = cutoff
+        lastSamplingRate = samplingRate
+        
+        val warmUpIterations = kotlin.math.max((5.0 * samplingRate / kotlin.math.max(0.5, cutoff)).toInt(), 64)
+        for (warmUpIteration in 0 until warmUpIterations) {
+            for (axis in 0 until 3) {
+                butterworthFilters[axis].filter(seed[axis].toDouble())
+            }
+        }
     }
 
     private fun initializeButterworthFilters(cutoffInput: Double, samplingFreqValue: Int) {
