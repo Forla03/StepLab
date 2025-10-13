@@ -59,7 +59,6 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
     }
 
     private fun initializeWithConfiguration() {
-        // Istanzia il processor (sempre Java-like con millisecondi)
         stepDetectionProcessor = StepDetectionProcessor(configuration)
         
         // Mappa l'indice alla Fs in Hz 
@@ -69,10 +68,10 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
             2 -> 50
             3 -> 100
             else -> 250 
-        }
-        // Passa la Fs iniziale al processor
+        }     
         stepDetectionProcessor.setInitialSamplingFrequency(fsConfiguredHz)
         
+        // Reset all counters to ensure clean state (like Java: new instance = clean state)
         stepCount = 0
         counter = 0
     }
@@ -102,7 +101,7 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         when (configuration.samplingFrequencyIndex) {
             0 -> samplingPeriodMicros = 50000
             1 -> samplingPeriodMicros = 25000
-            2 -> samplingPeriodMicros = 20000
+            2 -> samplingPeriodMicros = 20000      
             3 -> samplingPeriodMicros = 10000
             4 -> samplingPeriodMicros = SensorManager.SENSOR_DELAY_FASTEST
         }
@@ -120,6 +119,7 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         // Register sensors with exact requested sampling rate 
         sensorManager.registerListener(this, accelerometer, samplingPeriodMicros)
         sensorManager.registerListener(this, magnetometer, samplingPeriodMicros)
+        // TYPE_GRAVITY is a virtual sensor calculated by Android from accelerometer + gyroscope
         sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST)
     }
 

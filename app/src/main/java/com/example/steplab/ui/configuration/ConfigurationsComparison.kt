@@ -1,4 +1,4 @@
-package com.example.steplab.ui.configuration
+﻿package com.example.steplab.ui.configuration
 
 import android.content.Intent
 import android.graphics.Color
@@ -237,6 +237,13 @@ class ConfigurationsComparison : AppCompatActivity() {
                         context.setFsForBatch(fsBatch)
                         context.processAutocorrelationAlgorithm()
                     } else {
+                        // Process all samples at the test's native sampling frequency
+                        // The sampling frequency will be calculated dynamically by updateFsFromMillis
+                        // Configuration differences are based on algorithm, filter type, and parameters only
+                        
+                        // CRITICAL: Reset counter for each configuration (like Java version)
+                        context.resetCounter()
+                        
                         // Sort keys by timestamp to ensure temporal order
                         val keysSorted = jsonObject.keys().asSequence().toList().sortedBy { it.toLong() }
                         var processedEvents = 0
@@ -244,7 +251,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                         for (key in keysSorted) {
                             val eventJson = jsonObject.getJSONObject(key)
                             context.myOnSensorChanged(key.toLong(), eventJson)
-
+                            
                             processedEvents++
                             if (processedEvents % 100 == 0) {
                                 kotlinx.coroutines.yield()
@@ -278,12 +285,12 @@ class ConfigurationsComparison : AppCompatActivity() {
         for ((index, processed) in processedConfigurations.withIndex()) {
             val configDataSet = LineDataSet(processed.chartEntries, "${index + 1}").apply {
                 color = processed.color
-                setDrawValues(true)
+                setDrawValues(false) // Like Java version - don't show values on chart
                 setCircleColor(processed.color)
                 setDrawCircles(true)
                 circleRadius = 4f
                 lineWidth = 2f
-                setDrawIcons(!isDrawIconsEnabled) // keep icons for "false steps" if used
+                setDrawIcons(false) // Don't draw icons (Java version doesn't use them)
             }
 
             myLines.add(configDataSet)
@@ -314,6 +321,9 @@ class ConfigurationsComparison : AppCompatActivity() {
     ) {
         private val stepDetectionProcessor = StepDetectionProcessor(configuration)
 
+        // No initial frequency setup needed - the processor will calculate it dynamically
+        // from the actual timestamps in the recorded test data via updateFsFromMillis
+
         var stepsCount: Int
             get() = stepDetectionProcessor.stepsCount
             private set(value) {}
@@ -331,6 +341,11 @@ class ConfigurationsComparison : AppCompatActivity() {
 
         fun setFsForBatch(fs: Int) {
             stepDetectionProcessor.setFixedFsForBatch(fs)
+        }
+        
+        // CRITICAL: Reset counter for each configuration (like Java version)
+        fun resetCounter() {
+            stepDetectionProcessor.resetCounterForComparison()
         }
     }
 

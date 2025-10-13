@@ -51,6 +51,7 @@
     <string name="No">No</string>
     <string name="additional_notes">Additional Notes</string>
     <string name="import_test">Import Test</string>
+    <string name="import_csv_test">Import CSV Test</string>
     <string name="send_test">Send Test</string>
     <string name="send">Send</string>
     <string name="test_imported">Test Imported!</string>

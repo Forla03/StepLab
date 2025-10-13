@@ -14,7 +14,7 @@ import com.example.steplab.ui.configuration.EnterSettingsFragment
 
 class LiveTesting : AppCompatActivity() {
 
-    private var configuration: Configuration? = null
+    private lateinit var configuration: Configuration
     private var pedometerRunningFragment: PedometerRunningFragment? = null
 
     private lateinit var newPedometerButton: Button
@@ -29,11 +29,14 @@ class LiveTesting : AppCompatActivity() {
 
         newPedometerButton.setOnClickListener {
             configuration = Configuration()
-            (getSystemService(SENSOR_SERVICE) as SensorManager)
-                .unregisterListener(pedometerRunningFragment)
+            
+            // Unregister previous fragment's sensors if it exists
+            pedometerRunningFragment?.let {
+                (getSystemService(SENSOR_SERVICE) as SensorManager).unregisterListener(it)
+            }
 
             supportFragmentManager.beginTransaction()
-                .replace(R.id.frame_layout, EnterSettingsFragment(configuration!!))
+                .replace(R.id.frame_layout, EnterSettingsFragment(configuration))
                 .commit()
 
             newPedometerButton.visibility = View.GONE
@@ -41,7 +44,9 @@ class LiveTesting : AppCompatActivity() {
         }
 
         startPedometerButton.setOnClickListener {
-            pedometerRunningFragment = configuration?.let { PedometerRunningFragment.newInstance(it) }
+            // Create a new fragment instance with the current configuration
+            // This ensures clean state for each new pedometer session
+            pedometerRunningFragment = PedometerRunningFragment.newInstance(configuration)
 
             supportFragmentManager.beginTransaction()
                 .replace(R.id.frame_layout, pedometerRunningFragment!!)

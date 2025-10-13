@@ -63,6 +63,7 @@ class SendTest : AppCompatActivity() {
                 if (card.selected) {
                     val file = File(applicationContext.filesDir, card.filePathName)
                     if (file.exists()) {
+                        // File exists: use it directly
                         val uri = FileProvider.getUriForFile(
                             applicationContext,
                             "com.example.steplab.fileprovider",
@@ -71,11 +72,12 @@ class SendTest : AppCompatActivity() {
                         filesToShare.add(uri)
                     } else {
                         try {
-                            val fileWithExtension = if (card.filePathName.endsWith(".json")) {
-                                File(applicationContext.filesDir, card.filePathName)
-                            } else {
-                                File(applicationContext.filesDir, "${card.filePathName}.json")
-                            }
+                            // File doesn't exist: create .txt file with proper structure
+                            // Always use .txt extension for consistency with import
+                            val fileWithExtension = File(
+                                applicationContext.filesDir, 
+                                card.filePathName.removeSuffix(".json").removeSuffix(".txt") + ".txt"
+                            )
                             
                             val exportData = JSONObject().apply {
                                 put("test_values", card.testValues)

@@ -74,9 +74,8 @@ class StepDetectionProcessor(
     private val recordList = mutableListOf<Sample>()
     
     private var lastSensorEventNs: Long = -1L
-    private var isIdle = false
-    private var settlingLeft = 0
-    private val IDLE_THRESHOLD_MS = 700L
+    private var lastBatchInstant: Long = -1L  
+    private val IDLE_THRESHOLD_MS = 4000L
 
     private val reusableValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
     private val reusableXAxisValues = arrayOf(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO)
@@ -89,7 +88,6 @@ class StepDetectionProcessor(
     private var collectForCharts = false
     private var forceFs: Int? = null
     
-    // Java-aligned frequency sampling logic variables
     private var currentSecond: Int = -1
     private var firstCurrentSecond: Int = -1
     private var numberOfSensorEvents: Int = 0
@@ -109,9 +107,13 @@ class StepDetectionProcessor(
         counter = 0
         chartEntries.clear()
         lastAccelTsNanos = -1L
+        lastBatchInstant = -1L  
         emaFs = 0.0
         firstSignal = true
         lastAccelerationMagnitude = null
+        
+        // Reset sensor event tracking
+        lastSensorEventNs = -1L
         
         // Reset Java-aligned frequency sampling variables
         currentSecond = -1
@@ -128,8 +130,24 @@ class StepDetectionProcessor(
         s = 0
         sOld = 0
     }
+    
+    /**
+     * Reset counter for configuration comparison mode.
+     * This ensures chart entries start from 0 for each configuration comparison.
+     */
+    fun resetCounterForComparison() {
+        counter = 0
+        chartEntries.clear()
+        _stepsCount.set(0)
+        
+        // Reset Java-aligned frequency sampling variables
+        currentSecond = -1
+        firstCurrentSecond = -1
+        numberOfSensorEvents = 0
+    }
 
     private fun initializeConfiguration() {
+        configuration.gravity = BigDecimal("9.80665")
         configuration.lastDetectedStepTime = 0L
         configuration.lastStepSecondPhaseTime = 0L
 
@@ -184,12 +202,6 @@ class StepDetectionProcessor(
         when (sensorType) {
             android.hardware.Sensor.TYPE_ACCELEROMETER -> {
                 accelerometerEvent = true
-                
-                if (isIdle) {
-                    isIdle = false
-                    settlingLeft = calculateSettlingPeriod()
-                    primeFiltersWithCurrentValue(values)
-                }
                 lastSensorEventNs = nowNs
                 
                 reusableValues[0] = BigDecimal.valueOf(values[0].toDouble())
@@ -224,21 +236,10 @@ class StepDetectionProcessor(
             }
         }
         
-        if (lastSensorEventNs > 0 && (nowNs - lastSensorEventNs) > (IDLE_THRESHOLD_MS * 1_000_000)) {
-            isIdle = true
-        }
-        
-        if (accelerometerEvent && !isIdle) {
-            val shouldMute = settlingLeft > 0
-            
+        if (accelerometerEvent) {
             processFiltersAndDetection(timestamp)
             if (configuration.recognitionAlgorithm == 1) {
                 applyIntersectionCorrection(timestamp)
-            }
-            
-            if (shouldMute) {
-                stepDetected = false
-                settlingLeft--
             }
         }
         
@@ -262,7 +263,12 @@ class StepDetectionProcessor(
     fun processBatchSensorData(instant: Long, eventJson: JSONObject): Boolean {
         stepDetected = false
         collectForCharts = true
+        
+        // Reset accelerometerEvent - will be set to true only if accelerometer data is present
+        accelerometerEvent = false
+        
         try {
+            // Process accelerometer data if present
             if (eventJson.has("acceleration_x")) {
                 //Update fs whit ms of the key
                 updateFsFromMillis(instant)
@@ -278,15 +284,19 @@ class StepDetectionProcessor(
                 //Create separate copies for each sensor
                 accelerometer.rawValues = arrayOf(vector[0], vector[1], vector[2])
                 accelerometerXAxis.rawValues = arrayOf(vector[0], vector[1], vector[2])
-            } else if (eventJson.has("magnetometer_x")) {
-                accelerometerEvent = false
+            }
+            
+            // Process magnetometer data if present (can coexist with accelerometer in same JSON)
+            if (eventJson.has("magnetometer_x")) {
                 magnetometer.rawValues = arrayOf(
                     BigDecimal(eventJson.getString("magnetometer_x")),
                     BigDecimal(eventJson.getString("magnetometer_y")),
                     BigDecimal(eventJson.getString("magnetometer_z"))
                 )
-            } else if (eventJson.has("gravity_x")) {
-                accelerometerEvent = false
+            }
+            
+            // Process gravity data if present
+            if (eventJson.has("gravity_x")) {
                 configuration.gravity = calculations.resultant(
                     arrayOf(
                         BigDecimal(eventJson.getString("gravity_x")),
@@ -294,8 +304,10 @@ class StepDetectionProcessor(
                         BigDecimal(eventJson.getString("gravity_z"))
                     )
                 )
-            } else if (eventJson.has("rotation_x")) {
-                accelerometerEvent = false
+            }
+            
+            // Process rotation data if present
+            if (eventJson.has("rotation_x")) {
                 rotation.rawValues = arrayOf(
                     BigDecimal(eventJson.getString("rotation_x")),
                     BigDecimal(eventJson.getString("rotation_y")),
@@ -305,11 +317,15 @@ class StepDetectionProcessor(
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        processFiltersAndDetection(instant)
-        // Apply intersection correction only for intersection algorithm (1), not for time filtering (2)
-        if (configuration.recognitionAlgorithm == 1) {
-            applyIntersectionCorrection(instant)
+        
+        if (accelerometerEvent) {
+            processFiltersAndDetection(instant)
+            // Apply intersection correction only for intersection algorithm (1), not for time filtering (2)
+            if (configuration.recognitionAlgorithm == 1) {
+                applyIntersectionCorrection(instant)
+            }
         }
+        
         if (stepDetected) {
             handleStepDetection()
         } else {
@@ -424,29 +440,32 @@ class StepDetectionProcessor(
             return
         }
 
-        if (currentSec != firstCurrentSecond) {
-            if (currentSec == currentSecond) {
-                numberOfSensorEvents++
-            } else {
-                // 1) update fs with the last second
-                samplingRateValue = numberOfSensorEvents.coerceAtLeast(1)
+        // During the first second, count events for initial Fs estimation
+        if (currentSec == firstCurrentSecond) {
+            numberOfSensorEvents++
+            samplingRateValue = numberOfSensorEvents.coerceAtLeast(1)
+        } else if (currentSec == currentSecond) {
+            // Same second as before, just increment counter
+            numberOfSensorEvents++
+        } else {
+            // New second detected - update Fs and reset counter
+            samplingRateValue = numberOfSensorEvents.coerceAtLeast(1)
 
-                // 2) calculate dynamically
-                if (configuration.filterType == 1) {
-                    if (configuration.cutoffFrequencyIndex == 3) {
-                        // Cutoff = 2%
-                        cutoffFrequencyValue = (samplingRateValue * 0.02).toInt().coerceAtLeast(1)
-                        alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
-                    } else {
-                        val cutoff = cutoffFrequencyValue ?: 3
-                        alpha = calculateAlpha(samplingRateValue, cutoff)
-                    }
+            // Recalculate alpha dynamically if using low-pass filter
+            if (configuration.filterType == 1) {
+                if (configuration.cutoffFrequencyIndex == 3) {
+                    // Cutoff = 2% of sampling rate
+                    cutoffFrequencyValue = (samplingRateValue * 0.02).toInt().coerceAtLeast(1)
+                    alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
+                } else {
+                    val cutoff = cutoffFrequencyValue ?: 3
+                    alpha = calculateAlpha(samplingRateValue, cutoff)
                 }
-
-                // 3) reset
-                currentSecond = currentSec
-                numberOfSensorEvents = 0
             }
+
+            // Move to the new second and reset counter
+            currentSecond = currentSec
+            numberOfSensorEvents = 0
         }
     }
 
@@ -479,16 +498,6 @@ class StepDetectionProcessor(
         }
     }
 
-    /**
-     * @deprecated This method using nanosecond timestamps is no longer used.
-     * The application now uses updateFsFromMillis() for both batch and live modes
-     * to ensure consistent Java-aligned behavior with per-second event counting.
-     */
-    @Deprecated("Replaced by updateFsFromMillis() for Java-aligned behavior")
-    private fun updateFsFromEventTimestamp(tsNanos: Long) {
-        lastAccelTsNanos = tsNanos
-        return
-    }
 
     private fun processFiltersAndDetection(instant: Long) {
         when (configuration.filterType) {
@@ -746,23 +755,6 @@ class StepDetectionProcessor(
         }
         oldMagn = magnN
         return isFalseStep
-    }
-
-    private fun calculateSettlingPeriod(): Int {
-        val fs = samplingRateValue.coerceAtLeast(20)
-        val samples = kotlin.math.max((5.0 * fs / kotlin.math.max(0.5, cutoffSelected)).toInt(), 64)
-        return samples
-    }
-
-    private fun primeFiltersWithCurrentValue(values: FloatArray) {
-        if (configuration.filterType == 4) {
-            val seed = arrayOf(
-                BigDecimal.valueOf(values[0].toDouble()),
-                BigDecimal.valueOf(values[1].toDouble()),
-                BigDecimal.valueOf(values[2].toDouble())
-            )
-            filters.reinitializeButterworthWithSeed(seed, cutoffSelected, samplingRateValue)
-        }
     }
 
     private fun calculateAlpha(samplingRate: Int, cutoffFrequency: Int): BigDecimal {

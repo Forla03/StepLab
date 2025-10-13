@@ -34,6 +34,8 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
         numberSelected = findViewById(R.id.number_selected)
         frameLayout = findViewById(R.id.frame_layout)
 
+        // Hide sampling rate selector in configuration comparison mode
+        // All configurations will use the test's native sampling frequency
         enterSettingsFragment = EnterSettingsFragment(appConfiguration, false, false)
         supportFragmentManager.beginTransaction()
             .replace(R.id.frame_layout, enterSettingsFragment)
@@ -54,7 +56,7 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
                         realTimeMode = 1  // Non-real-time mode
                         recognitionAlgorithm = -2  // Special code for autocorrelation algorithm
                         filterType = -2  // Special code for butterworth band pass filter  
-                        samplingFrequencyIndex = appConfiguration.samplingFrequencyIndex
+                        // samplingFrequencyIndex is not used in comparison mode
                         cutoffFrequencyIndex = -1  // Not applicable for autocorrelation
                         falseStepDetectionEnabled = false
                         detectionThreshold = BigDecimal.ZERO
@@ -73,6 +75,7 @@ class SelectConfigurationsToCompare : AppCompatActivity() {
 
                 if (numberOfConfigurationsSelected < 6) {
                     appConfiguration = Configuration()
+                    // Hide sampling rate selector - not used in comparison mode
                     enterSettingsFragment = EnterSettingsFragment(appConfiguration, false, false)
                     supportFragmentManager.beginTransaction()
                         .setCustomAnimations(
