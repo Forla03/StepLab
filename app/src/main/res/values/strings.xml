@@ -9,6 +9,8 @@
     <string name="modality_italic"><i>Modality: </i></string>
     <string name="real_time">Real-Time</string>
     <string name="not_real_time">Not Real-Time</string>
+    <string name="additional_algorithms">Additional Algorithms</string>
+    <string name="mode_auto_determined">(automatically determined)</string>
     <string name="step_recognition_algorithm">Step Recognition Algorithm</string>
     <string name="step_recognition_algorithm_italic"><i>Step Recognition Algorithm: </i></string>
     <string name="peak">Peak Algorithm</string>
@@ -23,6 +25,7 @@
     <string name="butterworth_filter">Butterworth Filter</string>
     <string name="falseMagn">False Step Recognition</string>
     <string name="autocorrelation">Autocorrelation</string>
+    <string name="none_additional">None</string>
     <string name="cutoff_frequency">Cutoff Frequency</string>
     <string name="cutoff_frequency_italic"><i>Cutoff Frequency: </i></string>
     <string name="dynamic_frequency">Dynamic (Adaptive)</string>

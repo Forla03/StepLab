@@ -48,18 +48,21 @@ class AdapterForConfigurationsCard(
         holder.numberBorder.backgroundTintList = ColorStateList.valueOf(colors[position])
         holder.steps.text = stepCounts[position].toString()
 
+        // Display modality based on configuration (automatically determined)
         val modalityText = if (config.realTimeMode == 0)
             ctx.getString(R.string.real_time) else ctx.getString(R.string.not_real_time)
-        val falseStepText = if (config.falseStepDetectionEnabled) " + False Step Detection" else ""
-        holder.modality.text = ctx.getString(R.string.modality_italic) + modalityText + falseStepText
+        holder.modality.text = ctx.getString(R.string.modality_italic) + modalityText
 
-        holder.algorithm.text = ctx.getString(R.string.step_recognition_algorithm_italic) + when (config.recognitionAlgorithm) {
+        // Build algorithm text including false step if enabled
+        val algorithmBase = when (config.recognitionAlgorithm) {
             0 -> ctx.getString(R.string.peak)
             1 -> ctx.getString(R.string.intersection)
             2 -> ctx.getString(R.string.timeFiltering)
             -2 -> "Autocorrelation Algorithm"
             else -> ""
         }
+        val falseStepText = if (config.falseStepDetectionEnabled) " + False Step Recognition" else ""
+        holder.algorithm.text = ctx.getString(R.string.step_recognition_algorithm_italic) + algorithmBase + falseStepText
 
         when (config.filterType) {
             0 -> { // Bagilevi

@@ -118,35 +118,30 @@
             android:layout_height="wrap_content"
             android:paddingLeft="20dp"
             android:paddingTop="10dp"
-            android:paddingBottom="10dp"
+            android:paddingBottom="5dp"
             android:text="@string/modality"
             android:textColor="?android:attr/textColorPrimary"
             android:textSize="18dp">
         </TextView>
-        <LinearLayout
+        
+        <TextView
+            android:id="@+id/current_modality_indicator"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
-            <RadioButton
-                android:id="@+id/modality_real_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="40dp"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:text="@string/real_time">
-            </RadioButton>
-            <RadioButton
-                android:id="@+id/modality_not_real_time"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="40dp"
-                android:enabled="true"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:text="@string/not_real_time">
-            </RadioButton>
-        </LinearLayout>
+            android:layout_marginLeft="40dp"
+            android:layout_marginRight="20dp"
+            android:paddingLeft="10dp"
+            android:paddingRight="10dp"
+            android:paddingTop="5dp"
+            android:paddingBottom="10dp"
+            android:text="@string/real_time"
+            android:textColor="?android:attr/textColorPrimary"
+            android:textSize="16dp"
+            android:textStyle="bold"
+            android:background="@drawable/radius"
+            android:gravity="center">
+        </TextView>
+        
         <View
             android:layout_width="match_parent"
             android:layout_height="0.1dp"
@@ -194,6 +189,15 @@
                 android:paddingLeft="10dp"
                 android:paddingRight="10dp"
                 android:text="@string/timeFiltering">
+            </RadioButton>
+            <RadioButton
+                android:id="@+id/autocorrelation"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/autocorrelation">
             </RadioButton>
         </LinearLayout>
         <View
@@ -366,15 +370,23 @@
             android:paddingLeft="20dp"
             android:paddingTop="10dp"
             android:paddingBottom="10dp"
-            android:text="@string/not_real_time"
+            android:text="@string/additional_algorithms"
             android:textColor="?android:attr/textColorPrimary"
-            android:textSize="18dp"
-            android:textAlignment="center">
+            android:textSize="18dp">
         </TextView>
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
+            <RadioButton
+                android:id="@+id/none_additional"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginLeft="40dp"
+                android:paddingLeft="10dp"
+                android:paddingRight="10dp"
+                android:text="@string/none_additional">
+            </RadioButton>
             <RadioButton
                 android:id="@+id/false_step_radio"
                 android:layout_width="wrap_content"
@@ -383,16 +395,6 @@
                 android:paddingLeft="10dp"
                 android:paddingRight="10dp"
                 android:text="@string/falseMagn">
-            </RadioButton>
-
-            <RadioButton
-                android:id="@+id/autocorrelation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="40dp"
-                android:paddingLeft="10dp"
-                android:paddingRight="10dp"
-                android:text="@string/autocorrelation">
             </RadioButton>
         </LinearLayout>
 
