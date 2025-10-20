@@ -15,6 +15,12 @@ class CsvToJsonConverter {
         val errorMessage: String? = null
     )
 
+    /**
+     * Detects CSV format and converts to JSON.
+     * Supports:
+     * 1. MotionTracker format: multiple rows per timestamp with sensor type
+     * 2. StepLab format: one row per timestamp with all sensor data
+     */
     fun convertCsvToJson(
         inputStream: InputStream,
         additionalNotes: String = "",
@@ -27,162 +33,333 @@ class CsvToJsonConverter {
                 return ConversionResult(false, null, errorMessage = "CSV file is empty")
             }
 
-            val header = splitCsvLine(lines.first())
-            val index = detectColumns(header)
-            if (index.timestamp < 0) {
-                return ConversionResult(false, null, errorMessage = "Missing Timestamp column")
+            // Extract metadata from comment lines (if present)
+            val metadata = extractMetadata(lines)
+            
+            // Find the actual header line (first non-comment line)
+            val headerLineIndex = lines.indexOfFirst { !it.trim().startsWith("#") }
+            if (headerLineIndex < 0) {
+                return ConversionResult(false, null, errorMessage = "No header found in CSV")
             }
-
-            val testValues = LinkedHashMap<String, JSONObject>()
-            var successCount = 0
-            var errorCount = 0
-
-            for (i in 1 until lines.size) {
-                try {
-                    val row = splitCsvLine(lines[i])
-                    if (row.size <= index.timestamp) continue
-
-                    val ts = row[index.timestamp].trim()
-                    if (ts.isEmpty()) continue
-
-                    var hasAnyData = false
-                    var timestampOffset = 0L
-                    val baseTimestamp = try { ts.toLong() } catch (_: Exception) { 0L }
-
-                    val ax = getNumeric(row, index.accelX)
-                    val ay = getNumeric(row, index.accelY)
-                    val az = getNumeric(row, index.accelZ)
-
-                    if (ax != null || ay != null || az != null) {
-                        val accelObj = JSONObject()
-                        if (ax != null) accelObj.put("acceleration_x", ax)
-                        if (ay != null) accelObj.put("acceleration_y", ay)
-                        if (az != null) accelObj.put("acceleration_z", az)
-                        if (ax != null && ay != null && az != null) {
-                            val mag = calcMagnitude(ax, ay, az)
-                            if (mag != null) accelObj.put("acceleration_magnitude", mag)
-                        }
-                                               
-                        getRaw(row, index.sex)?.let { accelObj.put("sex", it) }
-                        getRaw(row, index.age)?.let { accelObj.put("age", it) }
-                        getRaw(row, index.height)?.let { accelObj.put("height", it) }
-                        getRaw(row, index.weight)?.let { accelObj.put("weight", it) }
-                        getRaw(row, index.position)?.let { accelObj.put("position", it) }
-                        getRaw(row, index.activity)?.let { accelObj.put("activity", it) }
-                        
-                        testValues["${baseTimestamp + timestampOffset++}"] = accelObj
-                        hasAnyData = true
-                    }
-                 
-                    val gx = getNumeric(row, index.gyroX)
-                    val gy = getNumeric(row, index.gyroY)
-                    val gz = getNumeric(row, index.gyroZ)
-                    
-                    if (gx != null || gy != null || gz != null) {
-                        val gyroObj = JSONObject()
-                        if (gx != null) gyroObj.put("gyroscope_x", gx)
-                        if (gy != null) gyroObj.put("gyroscope_y", gy)
-                        if (gz != null) gyroObj.put("gyroscope_z", gz)
-                                            
-                        getRaw(row, index.sex)?.let { gyroObj.put("sex", it) }
-                        getRaw(row, index.age)?.let { gyroObj.put("age", it) }
-                        getRaw(row, index.height)?.let { gyroObj.put("height", it) }
-                        getRaw(row, index.weight)?.let { gyroObj.put("weight", it) }
-                        getRaw(row, index.position)?.let { gyroObj.put("position", it) }
-                        getRaw(row, index.activity)?.let { gyroObj.put("activity", it) }
-                        
-                        testValues["${baseTimestamp + timestampOffset++}"] = gyroObj
-                        hasAnyData = true
-                    }
-
-                    val mx = getNumeric(row, index.magnetX)
-                    val my = getNumeric(row, index.magnetY)
-                    val mz = getNumeric(row, index.magnetZ)
-                    
-                    if (mx != null || my != null || mz != null) {
-                        val magnetObj = JSONObject()
-                        if (mx != null) magnetObj.put("magnetometer_x", mx)
-                        if (my != null) magnetObj.put("magnetometer_y", my)
-                        if (mz != null) magnetObj.put("magnetometer_z", mz)
-                                               
-                        getRaw(row, index.sex)?.let { magnetObj.put("sex", it) }
-                        getRaw(row, index.age)?.let { magnetObj.put("age", it) }
-                        getRaw(row, index.height)?.let { magnetObj.put("height", it) }
-                        getRaw(row, index.weight)?.let { magnetObj.put("weight", it) }
-                        getRaw(row, index.position)?.let { magnetObj.put("position", it) }
-                        getRaw(row, index.activity)?.let { magnetObj.put("activity", it) }
-                        
-                        testValues["${baseTimestamp + timestampOffset++}"] = magnetObj
-                        hasAnyData = true
-                    }
-                  
-                    val grx = getNumeric(row, index.gravityX)
-                    val gry = getNumeric(row, index.gravityY)
-                    val grz = getNumeric(row, index.gravityZ)
-                    
-                    if (grx != null || gry != null || grz != null) {
-                        val gravityObj = JSONObject()
-                        if (grx != null) gravityObj.put("gravity_x", grx)
-                        if (gry != null) gravityObj.put("gravity_y", gry)
-                        if (grz != null) gravityObj.put("gravity_z", grz)
-                                           
-                        getRaw(row, index.sex)?.let { gravityObj.put("sex", it) }
-                        getRaw(row, index.age)?.let { gravityObj.put("age", it) }
-                        getRaw(row, index.height)?.let { gravityObj.put("height", it) }
-                        getRaw(row, index.weight)?.let { gravityObj.put("weight", it) }
-                        getRaw(row, index.position)?.let { gravityObj.put("position", it) }
-                        getRaw(row, index.activity)?.let { gravityObj.put("activity", it) }
-                        
-                        testValues["${baseTimestamp + timestampOffset++}"] = gravityObj
-                        hasAnyData = true
-                    }
-
-                    val rx = getNumeric(row, index.rotationX)
-                    val ry = getNumeric(row, index.rotationY)
-                    val rz = getNumeric(row, index.rotationZ)
-                    
-                    if (rx != null || ry != null || rz != null) {
-                        val rotationObj = JSONObject()
-                        if (rx != null) rotationObj.put("rotation_x", rx)
-                        if (ry != null) rotationObj.put("rotation_y", ry)
-                        if (rz != null) rotationObj.put("rotation_z", rz)
-                                              
-                        getRaw(row, index.sex)?.let { rotationObj.put("sex", it) }
-                        getRaw(row, index.age)?.let { rotationObj.put("age", it) }
-                        getRaw(row, index.height)?.let { rotationObj.put("height", it) }
-                        getRaw(row, index.weight)?.let { rotationObj.put("weight", it) }
-                        getRaw(row, index.position)?.let { rotationObj.put("position", it) }
-                        getRaw(row, index.activity)?.let { rotationObj.put("activity", it) }
-                        
-                        testValues["${baseTimestamp + timestampOffset++}"] = rotationObj
-                        hasAnyData = true
-                    }
-
-                    if (hasAnyData) successCount++
-                } catch (_: Exception) {
-                    errorCount++
-                }
+            
+            val header = splitCsvLine(lines[headerLineIndex])
+            
+            // Detect CSV format
+            val isStepLabFormat = isStepLabCsvFormat(header)
+            
+            // Use metadata from CSV if available, otherwise use parameters
+            val finalNotes = metadata["additional_notes"] ?: additionalNotes
+            val finalSteps = metadata["number_of_steps"]?.toIntOrNull() ?: numberOfStepsOverride
+            
+            if (isStepLabFormat) {
+                convertStepLabCsv(lines.drop(headerLineIndex), header, finalNotes, finalSteps)
+            } else {
+                convertMotionTrackerCsv(lines, header, finalNotes, finalSteps)
             }
-
-            if (successCount == 0) {
-                return ConversionResult(false, null, errorMessage = "No valid data rows found in CSV")
-            }
-
-            val root = JSONObject().apply {
-                put("number_of_steps", numberOfStepsOverride ?: successCount)
-                put("additional_notes", additionalNotes)
-                put("test_values", JSONObject(testValues as Map<*, *>))
-            }
-
-            ConversionResult(
-                success = true,
-                jsonString = root.toString(),
-                recordCount = successCount,
-                errorMessage = if (errorCount > 0) "Skipped $errorCount invalid rows" else null
-            )
         } catch (e: Exception) {
             ConversionResult(false, null, errorMessage = "Error reading CSV: ${e.message}")
         }
+    }
+
+    /**
+     * Extract metadata from comment lines (lines starting with #).
+     * Format: # key: value
+     */
+    private fun extractMetadata(lines: List<String>): Map<String, String> {
+        val metadata = mutableMapOf<String, String>()
+        
+        for (line in lines) {
+            val trimmed = line.trim()
+            if (!trimmed.startsWith("#")) break // Stop at first non-comment line
+            
+            // Parse "# key: value"
+            val content = trimmed.substring(1).trim() // Remove #
+            val colonIndex = content.indexOf(":")
+            if (colonIndex > 0) {
+                val key = content.substring(0, colonIndex).trim()
+                var value = content.substring(colonIndex + 1).trim()
+                
+                // Remove quotes if present
+                if (value.startsWith("\"") && value.endsWith("\"")) {
+                    value = value.substring(1, value.length - 1)
+                        .replace("\"\"", "\"") // Unescape doubled quotes
+                }
+                
+                metadata[key] = value
+            }
+        }
+        
+        return metadata
+    }
+
+    /**
+     * Detects if CSV is in StepLab format (all sensors in one row).
+     * StepLab CSV has direct sensor column names like "acceleration_x", "gyroscope_x", etc.
+     */
+    private fun isStepLabCsvFormat(header: List<String>): Boolean {
+        val normalized = header.map { normalize(it) }
+        
+        // Check for StepLab-specific column patterns
+        val hasStepLabPattern = normalized.any { col ->
+            col.contains("accelerationx") || 
+            col.contains("accelerationy") || 
+            col.contains("accelerationz") ||
+            col.contains("accelerationmagnitude")
+        }
+        
+        return hasStepLabPattern
+    }
+
+    /**
+     * Convert StepLab format CSV (one row per timestamp with all sensor data).
+     */
+    private fun convertStepLabCsv(
+        lines: List<String>,
+        header: List<String>,
+        additionalNotes: String,
+        numberOfStepsOverride: Int?
+    ): ConversionResult {
+        val normalized = header.map { normalize(it) }
+        
+        // Find column indices
+        val timestampIdx = normalized.indexOfFirst { it.contains("timestamp") || it.contains("time") }
+        if (timestampIdx < 0) {
+            return ConversionResult(false, null, errorMessage = "Missing Timestamp column")
+        }
+
+        val testValues = LinkedHashMap<String, JSONObject>()
+        var successCount = 0
+
+        for (i in 1 until lines.size) {
+            try {
+                val row = splitCsvLine(lines[i])
+                if (row.size <= timestampIdx) continue
+
+                val timestamp = row[timestampIdx].trim()
+                if (timestamp.isEmpty()) continue
+
+                val sensorData = JSONObject()
+                var hasData = false
+
+                // Map all columns to JSON object
+                for (j in header.indices) {
+                    if (j == timestampIdx) continue
+                    if (j >= row.size) continue
+                    
+                    val value = row[j].trim()
+                    if (value.isEmpty() || value.equals("nan", ignoreCase = true) || 
+                        value.equals("null", ignoreCase = true)) continue
+
+                    // Use original header name (not normalized)
+                    sensorData.put(header[j], value)
+                    hasData = true
+                }
+
+                if (hasData) {
+                    testValues[timestamp] = sensorData
+                    successCount++
+                }
+            } catch (_: Exception) {
+                // Skip invalid rows
+            }
+        }
+
+        if (successCount == 0) {
+            return ConversionResult(false, null, errorMessage = "No valid data rows found in CSV")
+        }
+
+        val root = JSONObject().apply {
+            put("number_of_steps", numberOfStepsOverride ?: 50)
+            put("additional_notes", additionalNotes)
+            put("test_values", JSONObject(testValues as Map<*, *>))
+        }
+
+        return ConversionResult(
+            success = true,
+            jsonString = root.toString(),
+            recordCount = successCount
+        )
+    }
+
+    /**
+     * Convert MotionTracker format CSV.
+     * All sensor data from the same row are combined into a single JSON object
+     * with the original timestamp (no artificial timestamp increments).
+     */
+    private fun convertMotionTrackerCsv(
+        lines: List<String>,
+        header: List<String>,
+        additionalNotes: String,
+        numberOfStepsOverride: Int?
+    ): ConversionResult {
+        val index = detectColumns(header)
+        if (index.timestamp < 0) {
+            return ConversionResult(false, null, errorMessage = "Missing Timestamp column")
+        }
+
+        val testValues = LinkedHashMap<String, JSONObject>()
+        var successCount = 0
+        var errorCount = 0
+
+        for (i in 1 until lines.size) {
+            try {
+                val row = splitCsvLine(lines[i])
+                if (row.size <= index.timestamp) continue
+
+                val ts = row[index.timestamp].trim()
+                if (ts.isEmpty()) continue
+
+                val timestamp = try { ts.toLong().toString() } catch (_: Exception) { ts }
+                
+                // Create a single JSON object with all sensor data from this row
+                val sensorData = JSONObject()
+                var hasAnyData = false
+
+                // Accelerometer
+                val ax = getNumeric(row, index.accelX)
+                val ay = getNumeric(row, index.accelY)
+                val az = getNumeric(row, index.accelZ)
+                
+                if (ax != null) {
+                    sensorData.put("acceleration_x", ax)
+                    hasAnyData = true
+                }
+                if (ay != null) {
+                    sensorData.put("acceleration_y", ay)
+                    hasAnyData = true
+                }
+                if (az != null) {
+                    sensorData.put("acceleration_z", az)
+                    hasAnyData = true
+                }
+                if (ax != null && ay != null && az != null) {
+                    val mag = calcMagnitude(ax, ay, az)
+                    if (mag != null) sensorData.put("acceleration_magnitude", mag)
+                }
+             
+                // Gyroscope
+                val gx = getNumeric(row, index.gyroX)
+                val gy = getNumeric(row, index.gyroY)
+                val gz = getNumeric(row, index.gyroZ)
+                
+                if (gx != null) {
+                    sensorData.put("gyroscope_x", gx)
+                    hasAnyData = true
+                }
+                if (gy != null) {
+                    sensorData.put("gyroscope_y", gy)
+                    hasAnyData = true
+                }
+                if (gz != null) {
+                    sensorData.put("gyroscope_z", gz)
+                    hasAnyData = true
+                }
+
+                // Magnetometer
+                val mx = getNumeric(row, index.magnetX)
+                val my = getNumeric(row, index.magnetY)
+                val mz = getNumeric(row, index.magnetZ)
+                
+                if (mx != null) {
+                    sensorData.put("magnetometer_x", mx)
+                    hasAnyData = true
+                }
+                if (my != null) {
+                    sensorData.put("magnetometer_y", my)
+                    hasAnyData = true
+                }
+                if (mz != null) {
+                    sensorData.put("magnetometer_z", mz)
+                    hasAnyData = true
+                }
+              
+                // Gravity
+                val grx = getNumeric(row, index.gravityX)
+                val gry = getNumeric(row, index.gravityY)
+                val grz = getNumeric(row, index.gravityZ)
+                
+                if (grx != null) {
+                    sensorData.put("gravity_x", grx)
+                    hasAnyData = true
+                }
+                if (gry != null) {
+                    sensorData.put("gravity_y", gry)
+                    hasAnyData = true
+                }
+                if (grz != null) {
+                    sensorData.put("gravity_z", grz)
+                    hasAnyData = true
+                }
+
+                // Rotation
+                val rx = getNumeric(row, index.rotationX)
+                val ry = getNumeric(row, index.rotationY)
+                val rz = getNumeric(row, index.rotationZ)
+                
+                if (rx != null) {
+                    sensorData.put("rotation_x", rx)
+                    hasAnyData = true
+                }
+                if (ry != null) {
+                    sensorData.put("rotation_y", ry)
+                    hasAnyData = true
+                }
+                if (rz != null) {
+                    sensorData.put("rotation_z", rz)
+                    hasAnyData = true
+                }
+                
+                // Metadata (add to all sensor types if present)
+                getRaw(row, index.sex)?.let { 
+                    sensorData.put("sex", it)
+                    hasAnyData = true
+                }
+                getRaw(row, index.age)?.let { 
+                    sensorData.put("age", it)
+                    hasAnyData = true
+                }
+                getRaw(row, index.height)?.let { 
+                    sensorData.put("height", it)
+                    hasAnyData = true
+                }
+                getRaw(row, index.weight)?.let { 
+                    sensorData.put("weight", it)
+                    hasAnyData = true
+                }
+                getRaw(row, index.position)?.let { 
+                    sensorData.put("position", it)
+                    hasAnyData = true
+                }
+                getRaw(row, index.activity)?.let { 
+                    sensorData.put("activity", it)
+                    hasAnyData = true
+                }
+
+                if (hasAnyData) {
+                    testValues[timestamp] = sensorData
+                    successCount++
+                }
+            } catch (_: Exception) {
+                errorCount++
+            }
+        }
+
+        if (successCount == 0) {
+            return ConversionResult(false, null, errorMessage = "No valid data rows found in CSV")
+        }
+
+        val root = JSONObject().apply {
+            put("number_of_steps", numberOfStepsOverride ?: successCount)
+            put("additional_notes", additionalNotes)
+            put("test_values", JSONObject(testValues as Map<*, *>))
+        }
+
+        return ConversionResult(
+            success = true,
+            jsonString = root.toString(),
+            recordCount = successCount,
+            errorMessage = if (errorCount > 0) "Skipped $errorCount invalid rows" else null
+        )
     }
 
     // -------------------- Helpers --------------------

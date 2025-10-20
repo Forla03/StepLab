@@ -189,7 +189,7 @@ class MainActivity : AppCompatActivity() {
                                 Pair(conversionResult.jsonString!!, 50) // Always use 50 as default
                             } ?: throw Exception("Cannot re-open CSV file")
                         } else {
-                            // TXT/JSON file: use as-is
+                            // JSON/TXT file: use as-is (support both .json and .txt for backward compatibility)
                             try {
                                 val json = JSONObject(content)
                                 // Validate it has the required structure
@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
                         val timestamp = System.currentTimeMillis()
                         val calendar = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
                         val internalFileName = String.format(
-                            "%04d-%02d-%02d_%02d:%02d:%02d.txt",
+                            "%04d-%02d-%02d_%02d:%02d:%02d.json",
                             calendar.get(java.util.Calendar.YEAR),
                             calendar.get(java.util.Calendar.MONTH) + 1,
                             calendar.get(java.util.Calendar.DAY_OF_MONTH),

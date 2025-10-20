@@ -3,7 +3,11 @@ package com.example.steplab.ui.test
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.widget.Button
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
@@ -11,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.utils.JsonToCsvConverter
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
@@ -57,56 +62,129 @@ class SendTest : AppCompatActivity() {
         }
 
         sendTestButton.setOnClickListener {
-            filesToShare.clear()
+            // Check if any tests are selected
+            val selectedTests = dataset.filter { it.selected }
+            if (selectedTests.isEmpty()) {
+                return@setOnClickListener
+            }
 
-            dataset.forEach { card ->
-                if (card.selected) {
-                    val file = File(applicationContext.filesDir, card.filePathName)
-                    if (file.exists()) {
-                        // File exists: use it directly
-                        val uri = FileProvider.getUriForFile(
-                            applicationContext,
-                            "com.example.steplab.fileprovider",
-                            file
-                        )
-                        filesToShare.add(uri)
+            // Show format selection dialog
+            showExportFormatDialog()
+        }
+    }
+
+    private fun showExportFormatDialog() {
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.export_format_dialog, null)
+        val dialog = AlertDialog.Builder(this)
+            .setView(dialogView)
+            .create()
+
+        val radioGroup = dialogView.findViewById<RadioGroup>(R.id.format_radio_group)
+        val radioJson = dialogView.findViewById<RadioButton>(R.id.radio_json)
+        val radioCsv = dialogView.findViewById<RadioButton>(R.id.radio_csv)
+        val btnCancel = dialogView.findViewById<Button>(R.id.btn_cancel)
+        val btnExport = dialogView.findViewById<Button>(R.id.btn_export)
+
+        btnCancel.setOnClickListener {
+            dialog.dismiss()
+        }
+
+        btnExport.setOnClickListener {
+            val exportAsCsv = radioCsv.isChecked
+            dialog.dismiss()
+            exportTests(exportAsCsv)
+        }
+
+        dialog.show()
+    }
+
+    private fun exportTests(exportAsCsv: Boolean) {
+        filesToShare.clear()
+
+        dataset.forEach { card ->
+            if (card.selected) {
+                val file = File(applicationContext.filesDir, card.filePathName)
+                
+                try {
+                    if (exportAsCsv) {
+                        // Export as CSV
+                        exportTestAsCsv(card, file)
                     } else {
-                        try {
-                            // File doesn't exist: create .txt file with proper structure
-                            // Always use .txt extension for consistency with import
-                            val fileWithExtension = File(
-                                applicationContext.filesDir, 
-                                card.filePathName.removeSuffix(".json").removeSuffix(".txt") + ".txt"
-                            )
-                            
-                            val exportData = JSONObject().apply {
-                                put("test_values", card.testValues)
-                                put("number_of_steps", card.numberOfSteps.toString())
-                                put("additional_notes", card.additionalNotes)
-                            }
-                            fileWithExtension.writeText(exportData.toString())
-                            
-                            val uri = FileProvider.getUriForFile(
-                                applicationContext,
-                                "com.example.steplab.fileprovider",
-                                fileWithExtension
-                            )
-                            filesToShare.add(uri)
-                        } catch (e: Exception) {
-                            e.printStackTrace()
-                        }
+                        // Export as JSON
+                        exportTestAsJson(card, file)
                     }
+                } catch (e: Exception) {
+                    e.printStackTrace()
                 }
             }
+        }
 
-            if (filesToShare.isNotEmpty()) {
-                val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = "text/plain"
-                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, filesToShare)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-                startActivity(Intent.createChooser(shareIntent, "Share test files via"))
+        if (filesToShare.isNotEmpty()) {
+            val mimeType = if (exportAsCsv) "text/csv" else "application/json"
+            val shareIntent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                type = mimeType
+                putParcelableArrayListExtra(Intent.EXTRA_STREAM, filesToShare)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
+            startActivity(Intent.createChooser(shareIntent, "Share test files via"))
+        }
+    }
+
+    private fun exportTestAsJson(card: CardTest, existingFile: File) {
+        // Create JSON file with .json extension
+        // Use testId to ensure unique filenames
+        val baseName = card.filePathName.removeSuffix(".json").removeSuffix(".txt")
+        val jsonFileName = "${baseName}_${card.testId}.json"
+        val jsonFile = File(applicationContext.filesDir, jsonFileName)
+        
+        // Build JSON structure
+        val exportData = JSONObject().apply {
+            put("number_of_steps", card.numberOfSteps)
+            put("additional_notes", card.additionalNotes)
+            put("test_values", JSONObject(card.testValues))
+        }
+        
+        // Write JSON file
+        jsonFile.writeText(exportData.toString())
+
+        val uri = FileProvider.getUriForFile(
+            applicationContext,
+            "com.example.steplab.fileprovider",
+            jsonFile
+        )
+        filesToShare.add(uri)
+    }
+
+    private fun exportTestAsCsv(card: CardTest, existingFile: File) {
+        // Create CSV file with .csv extension
+        // Use testId to ensure unique filenames
+        val baseName = card.filePathName.removeSuffix(".json").removeSuffix(".txt")
+        val csvFileName = "${baseName}_${card.testId}.csv"
+        val csvFile = File(applicationContext.filesDir, csvFileName)
+
+        // Build JSON structure (need full structure for conversion)
+        val jsonData = JSONObject().apply {
+            put("number_of_steps", card.numberOfSteps)
+            put("additional_notes", card.additionalNotes)
+            put("test_values", JSONObject(card.testValues))
+        }
+
+        // Convert to CSV
+        val converter = JsonToCsvConverter()
+        val result = converter.convertJsonToCsv(jsonData.toString())
+
+        if (result.success && result.csvString != null) {
+            csvFile.writeText(result.csvString)
+            
+            val uri = FileProvider.getUriForFile(
+                applicationContext,
+                "com.example.steplab.fileprovider",
+                csvFile
+            )
+            filesToShare.add(uri)
+        } else {
+            // Fallback to JSON if CSV conversion fails
+            exportTestAsJson(card, existingFile)
         }
     }
 

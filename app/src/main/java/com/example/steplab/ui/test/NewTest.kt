@@ -111,7 +111,7 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                             val calendar = java.util.Calendar.getInstance().apply { timeInMillis = firstTimestamp }
 
                             val fileName = String.format(
-                                "%04d-%02d-%02d_%02d:%02d:%02d.txt",
+                                "%04d-%02d-%02d_%02d:%02d:%02d.json",
                                 calendar.get(java.util.Calendar.YEAR),
                                 calendar.get(java.util.Calendar.MONTH) + 1,
                                 calendar.get(java.util.Calendar.DAY_OF_MONTH),

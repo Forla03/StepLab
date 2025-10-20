@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="24dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/export_format_title"
+        android:textColor="?android:attr/textColorPrimary"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:paddingBottom="16dp"/>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/export_format_message"
+        android:textColor="?android:attr/textColorSecondary"
+        android:textSize="14sp"
+        android:gravity="center"
+        android:paddingBottom="24dp"/>
+
+    <RadioGroup
+        android:id="@+id/format_radio_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <RadioButton
+            android:id="@+id/radio_json"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/format_json"
+            android:textSize="16sp"
+            android:padding="12dp"
+            android:checked="true"/>
+
+        <RadioButton
+            android:id="@+id/radio_csv"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/format_csv"
+            android:textSize="16sp"
+            android:padding="12dp"/>
+
+    </RadioGroup>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="end"
+        android:paddingTop="24dp">
+
+        <Button
+            android:id="@+id/btn_cancel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@android:string/cancel"
+            android:layout_marginEnd="8dp"
+            style="?attr/materialButtonOutlinedStyle"/>
+
+        <Button
+            android:id="@+id/btn_export"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/export_button"/>
+
+    </LinearLayout>
+
+</LinearLayout>

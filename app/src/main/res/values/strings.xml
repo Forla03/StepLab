@@ -74,4 +74,11 @@
     <string name="test_colon">Test:</string>
     <string name="configurations_colon">Configurations:</string>
     <string name="created_at">Created at:</string>
+    
+    <!-- Export Format Dialog -->
+    <string name="export_format_title">Export Format</string>
+    <string name="export_format_message">Choose the format for exporting the test:</string>
+    <string name="format_json">JSON Format (.json)</string>
+    <string name="format_csv">CSV Format (.csv)</string>
+    <string name="export_button">Export</string>
 </resources>
