@@ -105,7 +105,10 @@ class SavedTestsAdapter(
             AlertDialog.Builder(context)
                 .setMessage(context.getString(R.string.delete_saved_comparison))
                 .setPositiveButton(context.getString(R.string.yes)) { _, _ ->
-                    (context as SavedTests).deleteSavedTest(savedTest, position)
+                    val pos = holder.adapterPosition
+                    if (pos == RecyclerView.NO_POSITION) return@setPositiveButton
+                    val current = savedTests[pos]
+                    (context as SavedTests).deleteSavedTest(current, pos)
                 }
                 .setNegativeButton(context.getString(R.string.No), null)
                 .show()

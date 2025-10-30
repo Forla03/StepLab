@@ -38,6 +38,9 @@ class StepDetectionProcessor(
         private set
     private var alpha: BigDecimal? = null
 
+    // Track last applied filter to detect changes and reset internal state when needed
+    private var lastAppliedFilterType: Int = configuration.filterType
+
     // Thread-safe atomic counter for step count
     private val _stepsCount = AtomicInteger(0)
     var stepsCount: Int
@@ -480,7 +483,6 @@ class StepDetectionProcessor(
                 cutoffFrequencyValue = (samplingRateValue * 0.02).toInt().coerceAtLeast(1)
                 alpha = calculateAlpha(samplingRateValue, cutoffFrequencyValue!!)
             } else {
-                // CRITICAL FIX: Use fixed cutoff frequency like Java implementation
                 val cutoff = cutoffFrequencyValue!!
                 alpha = calculateAlpha(samplingRateValue, cutoff)
             }

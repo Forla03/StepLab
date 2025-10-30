@@ -132,14 +132,13 @@ class PedometerRunningFragment : Fragment(), SensorEventListener {
         val nowMs = System.currentTimeMillis()
 
         if (event.sensor.type == Sensor.TYPE_ACCELEROMETER) {
-            // Allineamento Java: conta eventi per secondo via ms
             stepDetectionProcessor.updateFsFromMillis(nowMs)
         }
 
         val result = stepDetectionProcessor.processRealTimeSensorData(
             event.sensor.type,
             event.values,
-            nowMs // ms per logiche di soglie/tempi già in ms
+            nowMs 
         )
 
         if (stepDetectionProcessor.accelerometerEvent) updateChart(result)

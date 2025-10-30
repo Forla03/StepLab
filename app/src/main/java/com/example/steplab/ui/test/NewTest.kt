@@ -80,11 +80,11 @@ class NewTest : AppCompatActivity(), SensorEventListener {
         startStopButton.text = getString(R.string.stop_new_test)
         sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-        magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+        magnetometer  = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
         gravitySensor = sensorManager?.getDefaultSensor(Sensor.TYPE_GRAVITY)
         rotationSensor = sensorManager?.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
         listOf(accelerometer, magnetometer, gravitySensor, rotationSensor).forEach {
-            it?.let { sensor -> sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_FASTEST) }
+            it?.let { sensor -> sensorManager?.registerListener(this, sensor, SensorManager.SENSOR_DELAY_GAME) }
         }
         startStopButton.setOnClickListener { stopRecording() }
     }

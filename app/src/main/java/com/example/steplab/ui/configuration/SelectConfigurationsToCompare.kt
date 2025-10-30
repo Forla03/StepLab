@@ -10,7 +10,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.addCallback
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
-import com.example.steplab.ui.test.SelectTest
 import java.math.BigDecimal
 
 class SelectConfigurationsToCompare : AppCompatActivity() {

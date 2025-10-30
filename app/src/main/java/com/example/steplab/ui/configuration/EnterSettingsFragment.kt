@@ -243,6 +243,7 @@ class EnterSettingsFragment(
                 uncheckAllFiltersExceptKeepingFalseStep(filterBagilevi)
                 autocorrelation?.isChecked = false
                 configuration.autocorcAlg = false
+                updateRealTimeMode()
             }
         }
 
@@ -256,6 +257,7 @@ class EnterSettingsFragment(
                 autocorrelation?.isChecked = false
                 configuration.autocorcAlg = false
                 if (!first) scrollView?.post { scrollView?.fullScroll(View.FOCUS_DOWN) } else first = false
+                updateRealTimeMode()
             }
         }
 
@@ -268,6 +270,7 @@ class EnterSettingsFragment(
                 uncheckAllFiltersExceptKeepingFalseStep(noFilter)
                 autocorrelation?.isChecked = false
                 configuration.autocorcAlg = false
+                updateRealTimeMode()
             }
         }
 
@@ -280,6 +283,7 @@ class EnterSettingsFragment(
                 uncheckAllFiltersExceptKeepingFalseStep(filterRotation)
                 autocorrelation?.isChecked = false
                 configuration.autocorcAlg = false
+                updateRealTimeMode()
             }
         }
 
@@ -464,7 +468,6 @@ class EnterSettingsFragment(
     }
 
     private fun uncheckAllFiltersExceptKeepingFalseStep(checked: RadioButton?) {
-        // CORREZIONE BUG: Permette la coesistenza di Butterworth + False Step Detection
         val shouldKeepFalseStep = configuration.realTimeMode == 1 && 
             (falseStepRadio?.isChecked == true || configuration.falseStepDetectionEnabled)
         
@@ -473,7 +476,6 @@ class EnterSettingsFragment(
             butterworthFilter, autocorrelation
         ).filter { it != checked }.forEach { it?.isChecked = false }
 
-        // CORREZIONE CRITICA: Non deselezionare false step se è compatibile con il filtro
         if (shouldKeepFalseStep && checked != falseStepRadio) {
             // Mantieni false step selezionata in modalità non real-time
             // Butterworth filter è compatibile con false step detection

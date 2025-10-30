@@ -17,7 +17,6 @@ import com.example.steplab.R
 import com.example.steplab.algorithms.*
 import com.example.steplab.data.local.*
 import com.example.steplab.ui.test.SavedTests
-import com.example.steplab.ui.test.SelectTest
 import com.github.mikephil.charting.charts.LineChart
 import com.github.mikephil.charting.data.Entry
 import com.github.mikephil.charting.data.LineData
@@ -240,8 +239,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                         // Process all samples at the test's native sampling frequency
                         // The sampling frequency will be calculated dynamically by updateFsFromMillis
                         // Configuration differences are based on algorithm, filter type, and parameters only
-                        
-                        // CRITICAL: Reset counter for each configuration (like Java version)
+                                            
                         context.resetCounter()
                         
                         // Sort keys by timestamp to ensure temporal order
@@ -343,7 +341,6 @@ class ConfigurationsComparison : AppCompatActivity() {
             stepDetectionProcessor.setFixedFsForBatch(fs)
         }
         
-        // CRITICAL: Reset counter for each configuration (like Java version)
         fun resetCounter() {
             stepDetectionProcessor.resetCounterForComparison()
         }

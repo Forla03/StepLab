@@ -1,4 +1,4 @@
-package com.example.steplab.ui.test
+package com.example.steplab.ui.configuration
 
 import android.os.Bundle
 import androidx.activity.addCallback
@@ -9,6 +9,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.main.MainActivity
+import com.example.steplab.ui.test.CardTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

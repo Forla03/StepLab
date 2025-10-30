@@ -1,4 +1,4 @@
-package com.example.steplab.ui.test
+package com.example.steplab.ui.configuration
 
 import android.content.Context
 import android.content.DialogInterface
@@ -17,7 +17,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
 import com.example.steplab.algorithms.Configuration
-import com.example.steplab.ui.configuration.ConfigurationsComparison
+import com.example.steplab.ui.test.CardTest
 import kotlinx.coroutines.launch
 import org.json.JSONException
 import org.json.JSONObject
@@ -78,11 +78,14 @@ class AdapterForTestCard(
         holder.notes.visibility = if (notes.isNullOrBlank()) View.GONE else View.VISIBLE
 
         holder.select.setOnClickListener {
+            val pos = holder.adapterPosition
+            if (pos == RecyclerView.NO_POSITION) return@setOnClickListener
+
             context.startActivity(
                 Intent(context, ConfigurationsComparison::class.java)
                     .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                     .putExtra("configurations", configurations)
-                    .putExtra("test", testDataset[position].testId)
+                    .putExtra("test", testDataset[pos].testId)
             )
         }
 
@@ -93,17 +96,23 @@ class AdapterForTestCard(
             AlertDialog.Builder(context)
                 .setMessage(context.getString(R.string.delete))
                 .setPositiveButton(context.getString(R.string.yes)) { _: DialogInterface?, _: Int ->
-                    val fileDeleted = File(context.filesDir, testDataset[position].filePathName).delete()
+                    val pos = holder.adapterPosition
+                    if (pos == RecyclerView.NO_POSITION) return@setPositiveButton
+
+                    val fileDeleted = File(context.filesDir, testDataset[pos].filePathName).delete()
 
                     val lifecycleOwner = context as? LifecycleOwner
                     lifecycleOwner?.lifecycleScope?.launch {
                         MainActivity.getDatabase()?.let { db ->
-                            db.databaseDao()?.deleteTest(testDataset[position].testId.toInt())
+                            val dao = db.databaseDao()
+                            // delete saved comparisons associated with this test, then the test itself
+                            dao?.deleteSavedConfigurationComparisonsByTestId(testDataset[pos].testId.toInt())
+                            dao?.deleteTest(testDataset[pos].testId.toInt())
                         }
                     }
 
-                    testDataset.removeAt(position)
-                    notifyItemRemoved(position)
+                    testDataset.removeAt(pos)
+                    notifyItemRemoved(pos)
                 }
                 .setNegativeButton(context.getString(R.string.No), null)
                 .create()

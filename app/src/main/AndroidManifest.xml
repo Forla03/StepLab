@@ -33,7 +33,7 @@
         <activity android:name=".ui.test.NewTest" android:screenOrientation="portrait" />
         <activity android:name=".ui.configuration.SelectConfigurationsToCompare" android:screenOrientation="portrait" />
         <activity android:name=".ui.configuration.ConfigurationsComparison" android:screenOrientation="portrait" />
-        <activity android:name=".ui.test.SelectTest" android:screenOrientation="portrait" />
+        <activity android:name=".ui.configuration.SelectTest" android:screenOrientation="portrait" />
         <activity android:name=".ui.test.SendTest" android:screenOrientation="portrait" />
         <activity android:name=".ui.test.SavedTests" android:screenOrientation="portrait" />
 

@@ -71,17 +71,26 @@ class AdapterForSendTestCard(
             AlertDialog.Builder(context)
                 .setMessage(context.getString(R.string.delete))
                 .setPositiveButton(context.getString(R.string.yes)) { _: DialogInterface?, _: Int ->
-                    if (item.selected) selectedTests--
+                    val pos = holder.adapterPosition
+                    if (pos == RecyclerView.NO_POSITION) return@setPositiveButton
+
+                    val current = dataset[pos]
+                    if (current.selected) selectedTests--
                     sendTestButton.isEnabled = selectedTests > 0
 
-                    File(context.filesDir, item.filePathName).delete()
+                    File(context.filesDir, current.filePathName).delete()
 
+                    // delete test and any saved comparisons associated with it
                     CoroutineScope(Dispatchers.IO).launch {
-                        MainActivity.getDatabase()?.databaseDao()?.deleteTest(item.testId.toInt())
+                        MainActivity.getDatabase()?.let { db ->
+                            val dao = db.databaseDao()
+                            dao?.deleteSavedConfigurationComparisonsByTestId(current.testId.toInt())
+                            dao?.deleteTest(current.testId.toInt())
+                        }
                     }
 
-                    dataset.removeAt(position)
-                    notifyItemRemoved(position)
+                    dataset.removeAt(pos)
+                    notifyItemRemoved(pos)
                 }
                 .setNegativeButton(context.getString(R.string.No), null)
                 .create()

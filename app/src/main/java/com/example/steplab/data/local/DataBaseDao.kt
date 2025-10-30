@@ -18,6 +18,9 @@ interface DatabaseDao {
     @Query("DELETE FROM EntityTest WHERE testId = :id")
     suspend fun deleteTest(id: Int)
 
+    @Query("DELETE FROM saved_configuration_comparisons WHERE testId = :testId")
+    suspend fun deleteSavedConfigurationComparisonsByTestId(testId: Int)
+
     @Query("SELECT * FROM EntityTest WHERE testId = :id")
     suspend fun getTestFromId(id: Int): EntityTest?
 
