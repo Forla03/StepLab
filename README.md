@@ -1,143 +1,255 @@
 # StepLab
 
+[![Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com/)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org/)
+[![Room](https://img.shields.io/badge/Database-Room-orange.svg)](https://developer.android.com/training/data-storage/room)
+
 ## Overview
 
-StepLab is an Android application for experimenting with and evaluating pedestrian step‑detection algorithms. It allows users to record sensor data, perform live step detection with configurable algorithms and filtering options, and compare the performance of different configurations on previously recorded tests. The application is designed primarily for research and teaching purposes, enabling rapid prototyping of step‑detection pipelines and visualizing their output.
+StepLab is an Android application designed for experimenting with and evaluating pedestrian step-detection algorithms. It enables users to record sensor data, perform live step detection with configurable algorithms and filtering options, and compare the performance of different configurations on previously recorded tests. The application is primarily intended for research and educational purposes, facilitating rapid prototyping of step-detection pipelines and providing clear visualization of their outputs.
 
 ## Features
 
+### Main Screen
+The main screen serves as the application hub, providing navigation to all core functionalities. It dynamically enables or disables features based on available data (e.g., comparison and export require saved tests).
+
 ### Record New Tests
-Capture raw sensor data (accelerometer, magnetometer, gravity, rotation) and store it in JSON files and a local Room database. Users specify the true number of steps and optional notes when saving a test.
+Record raw sensor data from accelerometer, magnetometer, gravity, and rotation sensors. During recording, the app displays a real-time chart of acceleration magnitude. When saving, users provide the actual step count and optional notes. The app stores test data as JSON files in internal storage and saves metadata in the Room database.
 
-### Live Step Detection
-Run a configurable pedometer in real time. Users select:
-- Sampling frequency
-- Filters (Bagilevi, low‑pass, none, rotation‑matrix, or Butterworth)
-- Recognition algorithm (peak detection only, peak + crossing, temporal filtering, or autocorrelation)
-- Optional false‑step detection
+### Create a Configuration
+The configuration screen is reused for both Live Testing and Configuration Comparison modes. Users can select:
+- **Sampling frequency** (for live testing only; estimated from file in batch mode)
+- **Filter type**: Bagilevi, Low-pass, None, Rotation Matrix, or Butterworth
+- **Recognition algorithm**: Peak detection, Peak + Crossing, or Temporal filtering
+- **Additional algorithms**: False-step detection (optional)
+- **Autocorrelation algorithm**: Special mode requiring the entire walk, not compatible with real-time processing
 
-The pedometer displays a real‑time chart of acceleration magnitude and updates the step count whenever a step is detected.
+A label indicates whether the configuration runs in "Real Time" or "Not Real Time" mode based on the selected algorithms.
 
-### Configurable Algorithm Parameters
-The Configuration data class captures all algorithm parameters:
-- Sampling rate
-- Real‑time mode
-- Recognition algorithm
-- Filter type
-- Cutoff frequency index
-- Detection threshold
-- Flags for false‑step detection and the autocorrelation algorithm
+### Live Testing
+Runs a configurable pedometer in real-time with a two-phase workflow:
+1. **Configuration**: Select sampling frequency, filter, recognition algorithm, and optional false-step detection
+2. **Execution**: The pedometer displays a real-time acceleration magnitude chart and updates the step count when steps are detected
 
-### Compare Configurations
-Select multiple configurations (up to six) and evaluate them on a recorded test. StepLab processes each configuration in the background, applies the appropriate filter and recognition algorithm, and plots the resulting filtered signal alongside the raw baseline. Step counts for each configuration are listed, allowing direct comparison.
+The architecture implements the State pattern, with `LiveTesting` managing transitions between configuration (`EnterSettingsFragment`) and execution (`PedometerRunningFragment`) states.
 
-### Autocorrelation‑based Counting
-Includes an implementation of the IPIN 2019 step‑detection pipeline, featuring:
-- High‑pass/low‑pass band‑pass filtering
-- Autocorrelation‑based fundamental frequency estimator
-- Moving standard deviation to detect activity segments
-- Robust step counting with cadence clamping
+### Configuration Comparison
+Compare up to 6 different configurations on a recorded test:
+1. Select configurations (similar to Live Testing but sampling frequency is estimated from file)
+2. Choose a test from the database
+3. View results plotted on a chart with acceleration magnitude baseline
+4. Each configuration is assigned a unique color
+5. Save comparisons for later review
+
+The comparison workflow:
+- **SelectConfigurationsToCompare**: Build configuration list
+- **SelectTest**: Choose test to analyze
+- **ConfigurationsComparison**: Process and visualize results
+
+### Saved Comparisons
+View previously saved configuration comparisons in a card-based list. Each card shows:
+- Comparison name
+- Preview with test name and configurations used
+- Ability to reopen the comparison chart (read-only, without save/export buttons)
 
 ### Import and Export Tests
-- Tests can be imported from plain text/JSON files and stored in the database
-- Selected tests can be exported and shared via Android's file‑sharing facilities
-
-### False‑step Detection
-Optional techniques based on magnetometer variance and Butterworth filter characteristics help reduce false positives. Users can enable or disable these detection modes via the configuration screen.
-
-### Data Persistence
-Uses Room ORM with an EntityTest table to store test metadata, values, number of steps, and notes.
+- **Import**: Select test files through Android's file picker. Supports JSON and CSV formats (CSV is automatically converted to JSON). Compatible with tests recorded by other apps like [MotionTracker](https://github.com/MotionTracker-Repository).
+- **Export**: Select one or more tests and choose export format (JSON or CSV). Files are shared via Android's share sheet using `FileProvider` for secure access.
 
 ## Architecture
 
-The application is organized into three main packages:
+### General Architecture
+The application is organized into four functional packages:
+- **UI**: User interface components
+- **Algorithms**: Signal processing and step detection logic
+- **Data**: Database persistence layer
+- **Utils**: Data format conversion utilities
 
-### Algorithms (`com.example.steplab.algorithms`)
-Contains the step‑detection logic:
-- **StepDetectionProcessor**: Orchestrates sensor processing, applying the selected filter and recognition algorithm and handling false‑step detection
-- **Filters class**: Implements Bagilevi, low‑pass, Butterworth and band‑pass filters
-- **Calculations class**: Provides helper methods for computing vector magnitudes, linear acceleration, rotation transforms, and autocorrelation analysis
-- **KeyValueRecognition**: Detects local maxima/minima and zero‑crossings for step detection
-- **StepDetection**: Performs different detection strategies, including the autocorrelation pipeline
-- **Configuration class**: Stores algorithm parameters and runtime state
+### Technologies Used
+- **Language**: Kotlin
+- **Build System**: Gradle Kotlin DSL with centralized version catalog
+- **UI**: XML layouts with AppCompat and Material Components
+- **Charts**: MPAndroidChart for real-time data visualization
+- **Database**: Room ORM with migration support
+- **Signal Processing**: JTransforms (FFT), iirj (digital filters), custom algorithms
+- **Concurrency**: Kotlin Coroutines with structured concurrency
 
-### UI (`com.example.steplab.ui`)
-Activities and fragments build the user interface:
-- **MainActivity**: Presents the main menu and initializes the database; routes to live testing, new test recording, configuration comparison, import, and export activities
-- **LiveTesting**: Hosts a PedometerRunningFragment where real‑time processing occurs
-- **NewTest**: Records a new test and writes JSON files
-- **SendTest**: Displays saved tests and allows sharing them
-- **SelectConfigurationsToCompare** and **ConfigurationsComparison**: Implement the configuration selection and comparison workflow
+### Package Details
 
-### Data (`com.example.steplab.data.local`)
-Defines the Room database with EntityTest, DatabaseDao, and MyDatabase.
+#### UI Package
+Contains all user interface components organized by function:
 
-## Using StepLab
+**Main**
+- **StepLabApplication**: Application class extending `Application`. Initializes the Room database singleton in `onCreate()` using the thread-safe Singleton pattern. Ensures the database is initialized once before any Activity starts. Registers migrations (MIGRATION_1_2 and MIGRATION_2_3) for schema evolution without data loss. Declared in the manifest with `android:name` attribute. Follows the Application Singleton pattern, a best practice that separates global initialization from UI logic.
+- **MainActivity**: Application hub. Verifies saved data availability via IO coroutine to enable/disable dependent features. Handles navigation to all major features. Implements complex multi-file import using `ActivityResultLauncher` with `GetMultipleContents()` contract and progress dialog.
+
+**Configuration**
+- **EnterSettingsFragment**: Centralized configuration form implementing MVC pattern. Supports two scenarios via boolean flags (`isLiveTesting`, `showSamplingRate`). Automatically determines operational mode (Real-Time vs Not Real-Time). Treats autocorrelation as exclusive special mode with separate pipeline.
+- **SelectConfigurationsToCompare**: Configuration builder activity hosting `EnterSettingsFragment` in a `FrameLayout`. Collects up to 6 configurations before starting comparison.
+- **SelectTest**: Intermediate activity for test selection. Loads tests from database via IO coroutine and displays in `RecyclerView` with `AdapterForTestCard`.
+- **ConfigurationsComparison**: Final workflow activity. Loads test data, initializes MPAndroidChart, draws acceleration magnitude baseline, processes configurations using `StepDetectionProcessor` facade, and visualizes results. Supports saving comparisons with unique names.
+
+**Test**
+- **LiveTesting**: Implements State pattern managing transitions between configuration and execution fragments. Reuses `EnterSettingsFragment` for configuration selection.
+- **PedometerRunningFragment**: Execution state implementing Observer pattern via `SensorEventListener`. Registers/unregisters sensors in `onResume()`/`onPause()` for battery optimization. Delegates processing to `StepDetectionProcessor`.
+- **NewTest**: Records sensor data at `SENSOR_DELAY_GAME` frequency. Stores events in `LinkedHashMap<Long, JSONObject>` indexed by timestamp. Requests optional metadata before saving as `EntityTest`.
+- **SendTest**: Lists saved tests in `RecyclerView`. Supports multi-selection and format choice (JSON/CSV) via dialog. Exports using `FileProvider` and `ACTION_SEND_MULTIPLE` intent.
+- **SavedTests**: Displays saved comparisons in interactive list. Managed by `SavedTestsAdapter` with expandable cards showing configurations. Supports deletion and read-only viewing.
+
+#### Algorithms Package
+Core computational package encapsulating signal processing logic:
+
+**Configuration and Sensor Data**
+- **Configuration**: Data class storing algorithm parameters and runtime state. Serves as the pipeline's backbone, modified by algorithms to maintain adaptive, coherent processing.
+- **SensorData**: Container for sensor data maintaining separation between raw and filtered values. Tracks 3D vectors, filtered versions, world-reference components, and magnitudes. Includes validity flags to prevent processing uninitialized data.
+
+**Step Detection Processor**
+Facade coordinating specialized components. Receives `Configuration` dependency at construction. Defines two distinct processing methods:
+- **ProcessRealTimeSensorData()**: Invoked by `PedometerRunningFragment` for each sensor event. Uses pre-allocated array pool to reduce GC pressure. Applies filter pipeline, optional intersection correction, false-positive validation, and returns `ProcessingResult`.
+- **ProcessBatchSensorData()**: Processes recorded test JSON entries sequentially. Flexible parsing supports various file formats. Dynamically estimates sampling frequency from timestamps. Same pipeline as real-time after parsing.
+- **ProcessAutocorrelationAlgorithm()**: Separate pipeline requiring complete file, not frame-by-frame processing.
+
+**Algorithm Classes**
+- **StepDetection**: Core step detection logic implementing various strategies from simple peak detection to complex autocorrelation analysis.
+- **KeyValueRecognition**: Analyzes key signal values, detecting peaks and valleys characteristic of human walking.
+- **Filters**: Signal conditioning operations eliminating noise before detection. Maintains multiple filter types and states.
+- **Calculations**: Mathematical functions and numerical support used across all pipeline modules.
+
+#### Data Package
+Manages local persistence: entities, Room, DAO, and database configuration.
+
+**Entities**
+- **EntityTest**: Stores acquired tests with JSON payload (`testValues`) containing heterogeneous samples. Preserves faithful trace avoiding frequent schema migrations. Dedicated columns for UI-relevant metadata (step count, notes, filename).
+- **EntitySavedConfigurationComparison**: "Head+body" model with atomic fields (name, test reference, timestamp) and `configurationsJson` containing serialized configuration list. Enables opening snapshots in future app versions.
+
+**Database Configuration**
+- **MyDatabase**: Room database at version 3 with two entities
+- **DatabaseDao**: Minimal DAO with suspend methods for coroutine integration
+- **ConfigurationSerializer**: Stateless serializer/deserializer for Configuration to/from JSON. Saves high-precision numbers as strings to preserve precision.
+
+**Schema Evolution**
+Two explicit migrations ensure additive, non-destructive evolution:
+- **MIGRATION_1_2**: Introduces `saved_configuration_comparisons` table with foreign key to `EntityTest` and index on `testId` for optimized lookups. Handles transition from version 1 (EntityTest only) to version 2 (with comparison support).
+- **MIGRATION_2_3**: Strengthens referential integrity by adding CASCADE foreign key constraint. Since SQLite doesn't support adding foreign keys to existing tables, this migration recreates the table: creates new version with constraint, copies all data, drops old table, renames new table, and recreates index. Ensures test deletion automatically removes associated comparisons, preventing orphaned data.
+
+Both migrations are registered in `StepLabApplication` and applied automatically by Room, guaranteeing schema evolution that protects user data across app updates. The database aggregates two domain entities with CASCADE foreign key ensuring referential integrity: deleting a test automatically removes all associated comparisons, maintaining database consistency. This is intentional: a comparison without its reference test loses meaning, and cascade deletion reflects the domain constraint.
+
+#### Utils Package
+Support components for data format conversion:
+- **CsvToJsonConverter**: Imports external CSV tests
+- **JsonToCsvConverter**: Exports results in tabular format
+Both handle different file schemas flexibly through automatic header analysis. Maintains acquisition and sharing pipeline independent of original data format. Compatible with [MotionTracker](https://github.com/MotionTracker-Repository) CSV files.
+
+## Getting Started
 
 ### Prerequisites
-- Android Studio Flamingo or later
-- Android device or emulator with sensors (accelerometer, magnetometer, gravity, rotation)
-- MPAndroidChart library (bundled via Gradle)
+- Android Studio Hedgehog or later
+- Android device or emulator with sensor support
+- Minimum SDK: 24 (Android 7.0)
+- Target SDK: 34 (Android 14)
 
 ### Building and Running
 
-1. Clone this repository:
+1. Clone the repository:
    ```bash
    git clone https://github.com/Forla03/StepLab.git
+   cd StepLab
    ```
 
-2. Open the project in Android Studio and allow it to synchronize Gradle dependencies.
+2. Open the project in Android Studio
 
-3. Connect an Android device or launch an emulator.
+3. Sync Gradle dependencies
 
-4. Build and run the app module. The main screen will display options to enter a configuration, record a new test, compare configurations, import a test, or send a test.
+4. Connect an Android device or start an emulator
 
-### Recording a New Test
+5. Build and run the app
 
-1. From the main menu, tap **Register New Test**.
-2. Press **Start New Test** to begin recording. Sensor data will be displayed in a graph as it is captured.
-3. When finished walking, tap **Stop New Test**. Provide the true number of steps and any notes, then tap **Save New Test**. The test data and metadata are stored in the local database and saved as a JSON file.
-4. Tests appear in the compare and send test screens.
+### Usage Workflow
 
-### Live Pedometer
+#### Recording a Test
+1. Tap **Register New Test** from main menu
+2. Press **Start New Test** to begin recording
+3. Walk naturally while the app records sensor data
+4. Tap **Stop New Test** when finished
+5. Enter the actual step count and optional notes
+6. Press **Save New Test**
 
-1. Tap **Enter Configuration**. The configuration screen allows you to choose:
-   - Sampling rate
-   - Real‑time or non‑real‑time mode
-   - Recognition algorithm
-   - Filter type
-   - Cutoff frequency
-   - Enable false‑step detection
-   - Select the autocorrelation algorithm when applicable
+#### Live Pedometer
+1. Tap **Enter Configuration**
+2. Select sampling rate, filter, and algorithm
+3. Press **Start Pedometer**
+4. Walk and observe real-time step counting
+5. Use **New Pedometer** to change configuration
 
-2. After selecting parameters, press **Start Pedometer**. The pedometer will start processing sensor data in real time, updating a chart and incrementing the step count whenever a step is detected.
+#### Comparing Configurations
+1. Tap **Compare Configurations**
+2. Create up to 6 configurations using **Add Configuration**
+3. Press **Start Comparison**
+4. Select a recorded test
+5. View results plotted with different colors
+6. Optionally save the comparison
 
-3. To change configuration, press **New Pedometer** and adjust settings.
+#### Import/Export
+- **Import**: Tap **Import Test**, select JSON/CSV files
+- **Export**: Tap **Export Test**, select tests and format (JSON/CSV)
 
-### Compare Configurations
+## Database Architecture
 
-1. Tap **Compare Configurations** on the main menu. If no tests exist, this option is disabled.
-2. Select up to six configurations. For each, choose algorithm parameters in the settings fragment and press **Add Configuration**.
-3. Once configurations are set, tap **Start Comparison**, choose a recorded test, and the app will process each configuration in parallel, displaying step counts and plots for each.
+StepLab uses Room with a carefully designed schema supporting evolution without data loss:
 
-### Import/Export Tests
+### Version History
+- **Version 1**: Initial schema with EntityTest only
+- **Version 2**: Added EntitySavedConfigurationComparison with foreign key and index
+- **Version 3**: Strengthened referential integrity with CASCADE constraint
 
-- **Import**: Use **Import Test** to pick a JSON file containing test data. The app parses the file and adds it to the database.
-- **Export**: Use **Send Test** to select recorded tests and share them via Android's share sheet. The app packages the selected test files into a share intent.
+### Migration Strategy
+- Migrations are additive and non-destructive
+- All migrations registered in `StepLabApplication.onCreate()`
+- Automatic application ensures seamless updates
+- Table recreation pattern handles SQLite foreign key limitations
+
+### Design Decisions
+- JSON payloads for flexible, evolvable data structures
+- Dedicated columns for stable UI-relevant metadata
+- Foreign keys with CASCADE for domain-consistent deletions
+- Suspend DAO methods for coroutine-based threading
+- Stateless serializers for forward/backward compatibility
 
 ## Contributing
 
-1. Fork the repository and create a feature branch.
-2. Follow the existing project structure: algorithmic code resides in `algorithms`, UI logic under `ui`, and data models under `data`.
-3. When adding new detection algorithms or filters, implement them in the `algorithms` package and integrate them into `StepDetectionProcessor`.
-4. Submit a pull request with a clear description of the changes.
+Contributions are welcome! Please follow these guidelines:
 
-## Acknowledgements and References
+1. Fork the repository and create a feature branch
+2. Follow existing code organization:
+   - Algorithmic code → `algorithms` package
+   - UI logic → `ui` package
+   - Data models → `data` package
+   - Conversions → `utils` package
+3. Maintain architectural patterns (Singleton, Facade, State, Observer, MVC)
+4. Write clear commit messages
+5. Add tests for new features when applicable
+6. Submit a pull request with detailed description
 
-StepLab builds upon prior work from both open‑source projects and academic research:
+## Acknowledgements
+
+StepLab builds upon prior research and open-source work:
 
 ### Pedometers Project
-The Pedometers app by Giacomo Neri (https://github.com/GiacomoNeriUnibo/Pedometers) implemented an early version of the pedometer experiment used in StepLab. Several core components of StepLab – including the low‑pass and Bagilevi filters, the detection of local maxima/minima and zero‑crossings, and the layout of the live pedometer screen – are ports or refinements of Pedometers' Java classes (`Filtri.java`, `IndividuazionePasso.java`, `RiconoscimentoValoriChiave.java`, and `LiveTesting.java`). These classes dynamically adjust thresholds to detect peaks and valleys, track the sign of derivative to locate extrema, and manage the user interface for starting and restarting a pedometer session. We gratefully acknowledge this work and thank Giacomo Neri for making it available.
+Based on work by Giacomo Neri ([Pedometers](https://github.com/GiacomoNeriUnibo/Pedometers)). Several core components – including low-pass and Bagilevi filters, local maxima/minima detection, zero-crossing detection, and live pedometer UI – are ports or refinements of the original Java classes (`Filtri.java`, `IndividuazionePasso.java`, `RiconoscimentoValoriChiave.java`, `LiveTesting.java`).
 
-### Autocorrelation Analysis Research
-StepLab's autocorrelation‑based step counter follows the methodology of the paper "Autocorrelation analysis of accelerometer signal to detect and count steps of smartphone users" (https://repositorium.sdum.uminho.pt/handle/1822/70549). The algorithm filters the acceleration magnitude into a selected band, computes the autocorrelation to estimate the fundamental step cadence, segments active walking using a moving standard deviation, and counts steps by placing markers at lags corresponding to the fundamental frequency. StepLab implements these steps in the `StepDetection` class and allows the band edges, filter order, and segment length to be configured.
+### Autocorrelation Research
+The autocorrelation-based step counter follows the methodology from "Autocorrelation analysis of accelerometer signal to detect and count steps of smartphone users" ([Repository](https://repositorium.sdum.uminho.pt/handle/1822/70549)). Implementation includes band-pass filtering, autocorrelation-based cadence estimation, moving standard deviation for activity segmentation, and robust step counting with cadence clamping.
+
+## License
+
+This project is available for academic and research purposes. Please cite this repository if you use it in your work.
+
+## Contact
+
+For questions, issues, or collaboration opportunities:
+- **Email**: francesco.forlani5@studio.unibo.it
+- **GitHub**: [Forla03](https://github.com/Forla03)
+
+---
+
+**StepLab** - An integrated environment for collecting, processing, and analyzing sensor data for pedestrian step detection research.

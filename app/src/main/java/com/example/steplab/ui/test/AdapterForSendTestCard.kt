@@ -9,8 +9,8 @@ import android.view.ViewGroup
 import android.widget.*
 import androidx.appcompat.app.AlertDialog
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,11 +82,10 @@ class AdapterForSendTestCard(
 
                     // delete test and any saved comparisons associated with it
                     CoroutineScope(Dispatchers.IO).launch {
-                        MainActivity.getDatabase()?.let { db ->
-                            val dao = db.databaseDao()
-                            dao?.deleteSavedConfigurationComparisonsByTestId(current.testId.toInt())
-                            dao?.deleteTest(current.testId.toInt())
-                        }
+                        val db = StepLabApplication.database
+                        val dao = db.databaseDao()
+                        dao?.deleteSavedConfigurationComparisonsByTestId(current.testId.toInt())
+                        dao?.deleteTest(current.testId.toInt())
                     }
 
                     dataset.removeAt(pos)

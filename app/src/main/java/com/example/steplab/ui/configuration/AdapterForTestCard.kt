@@ -14,8 +14,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.RecyclerView
-import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.algorithms.Configuration
 import com.example.steplab.ui.test.CardTest
 import kotlinx.coroutines.launch
@@ -103,12 +103,11 @@ class AdapterForTestCard(
 
                     val lifecycleOwner = context as? LifecycleOwner
                     lifecycleOwner?.lifecycleScope?.launch {
-                        MainActivity.getDatabase()?.let { db ->
-                            val dao = db.databaseDao()
-                            // delete saved comparisons associated with this test, then the test itself
-                            dao?.deleteSavedConfigurationComparisonsByTestId(testDataset[pos].testId.toInt())
-                            dao?.deleteTest(testDataset[pos].testId.toInt())
-                        }
+                        val db = StepLabApplication.database
+                        val dao = db.databaseDao()
+                        // delete saved comparisons associated with this test, then the test itself
+                        dao?.deleteSavedConfigurationComparisonsByTestId(testDataset[pos].testId.toInt())
+                        dao?.deleteTest(testDataset[pos].testId.toInt())
                     }
 
                     testDataset.removeAt(pos)

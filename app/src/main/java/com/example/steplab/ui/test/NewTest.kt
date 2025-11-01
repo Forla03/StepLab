@@ -10,11 +10,13 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
+import androidx.activity.addCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.algorithms.Calculations
 import com.example.steplab.data.local.EntityTest
 import com.github.mikephil.charting.charts.LineChart
@@ -74,6 +76,14 @@ class NewTest : AppCompatActivity(), SensorEventListener {
 
         startStopButton.setText(R.string.start_new_test)
         startStopButton.setOnClickListener { startRecording() }
+
+        // Handle back button press with modern API
+        onBackPressedDispatcher.addCallback(this) {
+            startActivity(
+                Intent(applicationContext, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            )
+        }
     }
 
     private fun startRecording() {
@@ -106,9 +116,9 @@ class NewTest : AppCompatActivity(), SensorEventListener {
             if (stepCount.isNotEmpty()) {
                 lifecycleScope.launch {
                     try {
-                        MainActivity.getDatabase()?.let { db ->
-                            val firstTimestamp = testData.keys.firstOrNull()?.toLongOrNull() ?: System.currentTimeMillis()
-                            val calendar = java.util.Calendar.getInstance().apply { timeInMillis = firstTimestamp }
+                        val db = StepLabApplication.database
+                        val firstTimestamp = testData.keys.firstOrNull()?.toLongOrNull() ?: System.currentTimeMillis()
+                        val calendar = java.util.Calendar.getInstance().apply { timeInMillis = firstTimestamp }
 
                             val fileName = String.format(
                                 "%04d-%02d-%02d_%02d:%02d:%02d.json",
@@ -150,7 +160,6 @@ class NewTest : AppCompatActivity(), SensorEventListener {
                                 Intent(applicationContext, MainActivity::class.java)
                                     .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
                             )
-                        }
                     } catch (e: Exception) {
                         e.printStackTrace()
                         Toast.makeText(this@NewTest, "Error saving test", Toast.LENGTH_SHORT).show()
@@ -223,14 +232,24 @@ class NewTest : AppCompatActivity(), SensorEventListener {
         counter++
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Not used
+    override fun onPause() {
+        super.onPause()
+        // Unregister sensor listeners to prevent memory leaks
+        sensorManager?.unregisterListener(this)
     }
 
-    @Deprecated(message = "Deprecated in Java")
-    override fun onBackPressed() {
-        super.onBackPressed()
-        startActivity(Intent(applicationContext, MainActivity::class.java)
-            .addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION))
+    override fun onResume() {
+        super.onResume()
+        // Re-register sensor listeners when activity resumes
+        // Only re-register if sensors have been initialized (recording has started)
+        sensorManager?.let { manager ->
+            manager.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_FASTEST)
+            manager.registerListener(this, magnetometer, SensorManager.SENSOR_DELAY_FASTEST)
+            manager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST)
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
+        // Not used
     }
 }

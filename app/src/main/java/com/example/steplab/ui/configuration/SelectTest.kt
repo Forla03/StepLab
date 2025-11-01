@@ -7,8 +7,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.algorithms.Configuration
-import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.ui.test.CardTest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -44,7 +44,7 @@ class SelectTest : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val items: List<CardTest> = withContext(Dispatchers.IO) {
-                    val db = MainActivity.getDatabase() ?: return@withContext emptyList()
+                    val db = StepLabApplication.database
                     val rows = db.databaseDao()?.getAllTests().orEmpty()
 
                     // Map only the lightweight fields for list items.

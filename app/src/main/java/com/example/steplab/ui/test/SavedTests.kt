@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.data.local.EntitySavedConfigurationComparison
 import com.example.steplab.ui.main.MainActivity
 import kotlinx.coroutines.Dispatchers
@@ -47,7 +48,7 @@ class SavedTests : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val savedTests = withContext(Dispatchers.IO) {
-                    MainActivity.getDatabase()?.databaseDao()?.getAllSavedConfigurationComparisons() ?: emptyList()
+                    StepLabApplication.database.databaseDao()?.getAllSavedConfigurationComparisons() ?: emptyList()
                 }
                 
                 savedTestsList.clear()
@@ -63,7 +64,7 @@ class SavedTests : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    MainActivity.getDatabase()?.databaseDao()?.deleteSavedConfigurationComparison(savedTest.id)
+                    StepLabApplication.database.databaseDao()?.deleteSavedConfigurationComparison(savedTest.id)
                 }
                 
                 savedTestsList.removeAt(position)

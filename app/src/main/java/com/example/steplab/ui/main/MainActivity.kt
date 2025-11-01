@@ -5,17 +5,13 @@ import android.database.CursorWindow
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.OpenableColumns
 import android.widget.Button
-import android.widget.Toast
 import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.room.Room
 import com.example.steplab.R
-import com.example.steplab.data.local.MyDatabase
 import com.example.steplab.ui.configuration.SelectConfigurationsToCompare
 import com.example.steplab.ui.test.LiveTesting
 import com.example.steplab.ui.test.NewTest
@@ -43,13 +39,6 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        // Initialize Room database
-        databaseInstance = Room.databaseBuilder(
-            applicationContext,
-            MyDatabase::class.java,
-            "tests.db"
-        ).addMigrations(MyDatabase.MIGRATION_1_2).build()
-
         btnEnterConfiguration = findViewById(R.id.enter_configuration)
         btnRegisterNewTest = findViewById(R.id.register_new_test)
         btnCompareConfigurations = findViewById(R.id.compare_configurations)
@@ -65,14 +54,14 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val hasAnyTests = withContext(Dispatchers.IO) {
                 try {
-                    databaseInstance?.databaseDao()?.getAllTests()?.isNotEmpty() == true
+                    StepLabApplication.database.databaseDao()?.getAllTests()?.isNotEmpty() == true
                 } catch (_: Exception) {
                     false
                 }
             }
             val hasAnySavedTests = withContext(Dispatchers.IO) {
                 try {
-                    databaseInstance?.databaseDao()?.getAllSavedConfigurationComparisons()?.isNotEmpty() == true
+                    StepLabApplication.database.databaseDao()?.getAllSavedConfigurationComparisons()?.isNotEmpty() == true
                 } catch (_: Exception) {
                     false
                 }
@@ -231,7 +220,7 @@ class MainActivity : AppCompatActivity() {
                             additionalNotes = additionalNotes,
                             fileName = internalFileName
                         )
-                        databaseInstance?.databaseDao()?.insertTest(entity)
+                        StepLabApplication.database.databaseDao()?.insertTest(entity)
 
                         ImportResult(true, fileName, null)
                     }
@@ -316,9 +305,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
-        private var databaseInstance: MyDatabase? = null
         const val NUMBER_OF_DOTS_IN_GRAPH = 300
-
-        fun getDatabase(): MyDatabase? = databaseInstance
     }
 }

@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.algorithms.*
 import com.example.steplab.data.local.*
 import com.example.steplab.ui.test.SavedTests
@@ -61,7 +62,7 @@ class ConfigurationsComparison : AppCompatActivity() {
         isViewMode = intent.getBooleanExtra("viewMode", false)
 
         lifecycleScope.launch(Dispatchers.IO) {
-            testApp = MainActivity.getDatabase()?.databaseDao()?.getTestFromId(testId.toInt())
+            testApp = StepLabApplication.database.databaseDao()?.getTestFromId(testId.toInt())
                 ?: return@launch
             jsonObject = JSONObject(testApp.testValues)
 
@@ -372,10 +373,10 @@ class ConfigurationsComparison : AppCompatActivity() {
     private fun saveConfigurationComparison(name: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                val database = MainActivity.getDatabase()
+                val database = StepLabApplication.database
                 
                 // Check if name already exists
-                val existing = database?.databaseDao()?.getSavedConfigurationComparisonByName(name)
+                val existing = database.databaseDao()?.getSavedConfigurationComparisonByName(name)
                 if (existing != null) {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@ConfigurationsComparison, getString(R.string.name_already_exists), Toast.LENGTH_SHORT).show()
@@ -395,7 +396,7 @@ class ConfigurationsComparison : AppCompatActivity() {
                 )
 
                 // Save to database
-                database?.databaseDao()?.insertSavedConfigurationComparison(savedComparison)
+                database.databaseDao()?.insertSavedConfigurationComparison(savedComparison)
 
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@ConfigurationsComparison, getString(R.string.comparison_saved), Toast.LENGTH_SHORT).show()

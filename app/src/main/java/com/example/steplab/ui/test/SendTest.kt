@@ -15,6 +15,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.steplab.ui.main.MainActivity
 import com.example.steplab.R
+import com.example.steplab.ui.main.StepLabApplication
 import com.example.steplab.utils.JsonToCsvConverter
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -43,7 +44,7 @@ class SendTest : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val testList = MainActivity.getDatabase()?.databaseDao()?.getAllTests()
+                val testList = StepLabApplication.database.databaseDao()?.getAllTests()
                 testList?.forEach { test ->
                     dataset.add(
                         CardTest(

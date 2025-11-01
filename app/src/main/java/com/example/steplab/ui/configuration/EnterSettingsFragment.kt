@@ -239,6 +239,11 @@ class EnterSettingsFragment(
             if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 0
+                // Reset threshold only if it was modified by another filter
+                if (configuration.detectionThreshold != BigDecimal.ZERO && 
+                    configuration.detectionThreshold != BigDecimal.valueOf(5)) {
+                    configuration.detectionThreshold = BigDecimal.ZERO
+                }
                 hideCutoffFrequency()
                 uncheckAllFiltersExceptKeepingFalseStep(filterBagilevi)
                 autocorrelation?.isChecked = false
@@ -251,7 +256,11 @@ class EnterSettingsFragment(
             if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 1
-                configuration.detectionThreshold = BigDecimal.valueOf(5)
+                // Reset threshold only if it was modified by another filter (e.g., rotation matrix = 8)
+                if (configuration.detectionThreshold != BigDecimal.ZERO && 
+                    configuration.detectionThreshold != BigDecimal.valueOf(5)) {
+                    configuration.detectionThreshold = BigDecimal.ZERO
+                }
                 showCutoffFrequency()
                 uncheckAllFiltersExceptKeepingFalseStep(filterLowPass)
                 autocorrelation?.isChecked = false
@@ -265,7 +274,11 @@ class EnterSettingsFragment(
             if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 2
-                configuration.detectionThreshold = BigDecimal.valueOf(5)
+                // Reset threshold only if it was modified by another filter
+                if (configuration.detectionThreshold != BigDecimal.ZERO && 
+                    configuration.detectionThreshold != BigDecimal.valueOf(5)) {
+                    configuration.detectionThreshold = BigDecimal.ZERO
+                }
                 hideCutoffFrequency()
                 uncheckAllFiltersExceptKeepingFalseStep(noFilter)
                 autocorrelation?.isChecked = false
@@ -291,6 +304,11 @@ class EnterSettingsFragment(
             if (suppressCallbacks) return@setOnCheckedChangeListener
             if (isChecked) {
                 configuration.filterType = 4
+                // Reset threshold only if it was modified by another filter
+                if (configuration.detectionThreshold != BigDecimal.ZERO && 
+                    configuration.detectionThreshold != BigDecimal.valueOf(5)) {
+                    configuration.detectionThreshold = BigDecimal.ZERO
+                }
                 hideCutoffFrequency()
                 uncheckAllFiltersExceptKeepingFalseStep(butterworthFilter)
                 autocorrelation?.isChecked = false
