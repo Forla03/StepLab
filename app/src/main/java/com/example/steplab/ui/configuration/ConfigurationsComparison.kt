@@ -64,7 +64,18 @@ class ConfigurationsComparison : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             testApp = StepLabApplication.database.databaseDao()?.getTestFromId(testId.toInt())
                 ?: return@launch
-            jsonObject = JSONObject(testApp.testValues)
+            
+            // Load sensor data from file instead of database
+            val testData = testApp.loadTestData(applicationContext)
+            if (testData == null) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, "Error loading test data", Toast.LENGTH_SHORT).show()
+                    finish()
+                }
+                return@launch
+            }
+            
+            jsonObject = testData.getJSONObject("test_values")
 
             withContext(Dispatchers.Main) {
                 setupViews()

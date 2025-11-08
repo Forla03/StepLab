@@ -18,7 +18,11 @@ class StepLabApplication : Application() {
             MyDatabase::class.java,
             "tests.db"
         )
-            .addMigrations(MyDatabase.MIGRATION_1_2, MyDatabase.MIGRATION_2_3)
+            .addMigrations(
+                MyDatabase.MIGRATION_1_2, 
+                MyDatabase.MIGRATION_2_3,
+                MyDatabase.MIGRATION_3_4
+            )
             .build()
     }
 

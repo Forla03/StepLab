@@ -194,7 +194,6 @@ class MainActivity : AppCompatActivity() {
 
                         // Parse the final JSON
                         val json = JSONObject(jsonContent)
-                        val testValues = json.getString("test_values")
                         val numberOfSteps = json.optInt("number_of_steps", actualSteps)
                         val additionalNotes = json.optString("additional_notes", fileName)
 
@@ -213,12 +212,12 @@ class MainActivity : AppCompatActivity() {
                         val file = File(applicationContext.filesDir, internalFileName)
                         file.writeText(jsonContent)
 
-                        // Save metadata in DB
+                        // Save only metadata in DB - sensor data stays in file
                         val entity = com.example.steplab.data.local.EntityTest(
-                            testValues = testValues,
                             numberOfSteps = numberOfSteps,
                             additionalNotes = additionalNotes,
-                            fileName = internalFileName
+                            fileName = internalFileName,
+                            recordedAt = timestamp
                         )
                         StepLabApplication.database.databaseDao()?.insertTest(entity)
 

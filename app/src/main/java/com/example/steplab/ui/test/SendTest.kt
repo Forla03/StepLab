@@ -46,10 +46,11 @@ class SendTest : AppCompatActivity() {
             try {
                 val testList = StepLabApplication.database.databaseDao()?.getAllTests()
                 testList?.forEach { test ->
+                    // Load only metadata - sensor data will be read from file when needed
                     dataset.add(
                         CardTest(
                             test.testId.toString(),
-                            test.testValues ?: "",
+                            "", // testValues no longer stored in database
                             test.numberOfSteps ?: 0,
                             test.additionalNotes ?: "",
                             test.fileName ?: ""
@@ -138,22 +139,25 @@ class SendTest : AppCompatActivity() {
         val jsonFileName = "${baseName}_${card.testId}.json"
         val jsonFile = File(applicationContext.filesDir, jsonFileName)
         
-        // Build JSON structure
-        val exportData = JSONObject().apply {
-            put("number_of_steps", card.numberOfSteps)
-            put("additional_notes", card.additionalNotes)
-            put("test_values", JSONObject(card.testValues))
+        // Read the complete test data from the original file
+        val sourceFile = File(applicationContext.filesDir, card.filePathName)
+        if (!sourceFile.exists()) {
+            return
         }
         
-        // Write JSON file
-        jsonFile.writeText(exportData.toString())
+        try {
+            val jsonContent = sourceFile.readText()
+            jsonFile.writeText(jsonContent)
 
-        val uri = FileProvider.getUriForFile(
-            applicationContext,
-            "com.example.steplab.fileprovider",
-            jsonFile
-        )
-        filesToShare.add(uri)
+            val uri = FileProvider.getUriForFile(
+                applicationContext,
+                "com.example.steplab.fileprovider",
+                jsonFile
+            )
+            filesToShare.add(uri)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     private fun exportTestAsCsv(card: CardTest, existingFile: File) {
@@ -163,29 +167,34 @@ class SendTest : AppCompatActivity() {
         val csvFileName = "${baseName}_${card.testId}.csv"
         val csvFile = File(applicationContext.filesDir, csvFileName)
 
-        // Build JSON structure (need full structure for conversion)
-        val jsonData = JSONObject().apply {
-            put("number_of_steps", card.numberOfSteps)
-            put("additional_notes", card.additionalNotes)
-            put("test_values", JSONObject(card.testValues))
+        // Read the complete test data from the original file
+        val sourceFile = File(applicationContext.filesDir, card.filePathName)
+        if (!sourceFile.exists()) {
+            return
         }
 
-        // Convert to CSV
-        val converter = JsonToCsvConverter()
-        val result = converter.convertJsonToCsv(jsonData.toString())
+        try {
+            val jsonContent = sourceFile.readText()
 
-        if (result.success && result.csvString != null) {
-            csvFile.writeText(result.csvString)
-            
-            val uri = FileProvider.getUriForFile(
-                applicationContext,
-                "com.example.steplab.fileprovider",
-                csvFile
-            )
-            filesToShare.add(uri)
-        } else {
-            // Fallback to JSON if CSV conversion fails
-            exportTestAsJson(card, existingFile)
+            // Convert to CSV
+            val converter = JsonToCsvConverter()
+            val result = converter.convertJsonToCsv(jsonContent)
+
+            if (result.success && result.csvString != null) {
+                csvFile.writeText(result.csvString)
+                
+                val uri = FileProvider.getUriForFile(
+                    applicationContext,
+                    "com.example.steplab.fileprovider",
+                    csvFile
+                )
+                filesToShare.add(uri)
+            } else {
+                // Fallback to JSON if CSV conversion fails
+                exportTestAsJson(card, existingFile)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 

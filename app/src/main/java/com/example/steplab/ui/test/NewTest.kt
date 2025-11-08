@@ -142,13 +142,13 @@ class NewTest : AppCompatActivity(), SensorEventListener {
 
                                 val file = File(applicationContext.filesDir, fileName)
                                 file.writeText(exportData.toString())
-                                //file.setReadable(true, false)
 
+                                // Save only metadata to database - sensor data stays in file
                                 val entity = EntityTest(
                                     fileName = fileName,
                                     numberOfSteps = stepCount.toIntOrNull() ?: 0,
-                                    testValues = testValuesObj.toString(),
-                                    additionalNotes = notes
+                                    additionalNotes = notes,
+                                    recordedAt = firstTimestamp
                                 )
                                 db.databaseDao()?.insertTest(entity)
                             }

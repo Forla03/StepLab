@@ -49,12 +49,23 @@ class AdapterForTestCard(
         holder.number.text = "${position + 1}. "
 
         try {
-            val testValues = testDataset[position].testValues
-            if (testValues.isNullOrEmpty()) {
-                holder.calendar.timeInMillis = System.currentTimeMillis()
+            // Try to extract timestamp from filename first (faster)
+            val fileName = testDataset[position].filePathName
+            val fileNameWithoutExt = fileName.removeSuffix(".json").removeSuffix(".txt")
+            
+            // Filename format: 2024-11-08_14:30:45
+            val parts = fileNameWithoutExt.split('_', '-', ':')
+            if (parts.size >= 6) {
+                holder.calendar.set(
+                    parts[0].toIntOrNull() ?: 0,  // year
+                    (parts[1].toIntOrNull() ?: 1) - 1,  // month (0-based)
+                    parts[2].toIntOrNull() ?: 1,  // day
+                    parts[3].toIntOrNull() ?: 0,  // hour
+                    parts[4].toIntOrNull() ?: 0,  // minute
+                    parts[5].toIntOrNull() ?: 0   // second
+                )
             } else {
-                val timestampKey = JSONObject(testValues).keys().next().toLong()
-                holder.calendar.timeInMillis = timestampKey
+                holder.calendar.timeInMillis = System.currentTimeMillis()
             }
 
             val day = holder.calendar[Calendar.DAY_OF_MONTH].toString().padStart(2, '0')
@@ -66,8 +77,9 @@ class AdapterForTestCard(
 
             holder.date.text = "$day/$month/$year - $hour:$minute:$second"
 
-        } catch (e: JSONException) {
+        } catch (e: Exception) {
             e.printStackTrace()
+            holder.date.text = "Unknown date"
         }
 
         holder.steps.text = context.getString(R.string.number_of_steps_counted) +
