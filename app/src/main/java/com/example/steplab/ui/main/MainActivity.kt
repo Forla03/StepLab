@@ -144,73 +144,92 @@ class MainActivity : AppCompatActivity() {
                         withContext(Dispatchers.Main) {
                             progressDialog.setMessage("Processing ${index + 1} of ${uris.size} files...\n${getFileNameFromUri(uri)}")
                         }
+                        
+                        android.util.Log.d("MainActivity", "Starting import ${index + 1}/${uris.size}: ${getFileNameFromUri(uri)}")
 
                         val result = runCatching {
-                        val fileName = getFileNameFromUri(uri)
-                        val content = contentResolver.openInputStream(uri)?.use { input ->
-                            BufferedReader(InputStreamReader(input)).use { br ->
-                                buildString {
-                                    var line: String?
-                                    while (br.readLine().also { line = it } != null) {
-                                        append(line).append('\n')
+                        var createdFile: File? = null
+                        var insertedTestId: Int? = null
+                        
+                        try {
+                            val fileName = getFileNameFromUri(uri)
+                            val content = contentResolver.openInputStream(uri)?.use { input ->
+                                BufferedReader(InputStreamReader(input)).use { br ->
+                                    buildString {
+                                        var line: String?
+                                        while (br.readLine().also { line = it } != null) {
+                                            append(line).append('\n')
+                                        }
                                     }
                                 }
-                            }
-                        } ?: error("Cannot open file: $fileName")
+                            } ?: error("Cannot open file: $fileName")
 
-                        // Detect file type and process accordingly
-                        val (jsonContent, actualSteps) = if (fileName.endsWith(".csv", ignoreCase = true)) {
-                            // CSV file: convert to JSON
-                            contentResolver.openInputStream(uri)?.use { input ->
-                                val conversionResult = csvConverter.convertCsvToJson(
-                                    inputStream = input,
-                                    additionalNotes = fileName, // Use filename as default notes
-                                    numberOfStepsOverride = 50   // Default to 50 steps
-                                )
-                                if (!conversionResult.success || conversionResult.jsonString.isNullOrEmpty()) {
-                                    throw Exception(conversionResult.errorMessage ?: "CSV conversion failed")
+                            // Detect file type and process accordingly
+                            val (jsonContent, actualSteps) = if (fileName.endsWith(".csv", ignoreCase = true)) {
+                                // CSV file: convert to JSON
+                                contentResolver.openInputStream(uri)?.use { input ->
+                                    val conversionResult = csvConverter.convertCsvToJson(
+                                        inputStream = input,
+                                        additionalNotes = fileName, // Use filename as default notes
+                                        numberOfStepsOverride = 50   // Default to 50 steps
+                                    )
+                                    if (!conversionResult.success || conversionResult.jsonString.isNullOrEmpty()) {
+                                        throw Exception(conversionResult.errorMessage ?: "CSV conversion failed")
+                                    }
+                                    
+                                    // Extract test_values from wrapper
+                                    val root = JSONObject(conversionResult.jsonString!!)
+                                    val testValuesStr = root.optJSONObject("test_values")?.toString() ?: "{}"
+                                    
+                                    Pair(conversionResult.jsonString!!, 50) // Always use 50 as default
+                                } ?: throw Exception("Cannot re-open CSV file")
+                            } else {
+                                // JSON/TXT file: use as-is (support both .json and .txt for backward compatibility)
+                                try {
+                                    val json = JSONObject(content)
+                                    // Validate it has the required structure
+                                    if (!json.has("test_values")) {
+                                        throw Exception("Invalid format: missing 'test_values'")
+                                    }
+                                    val steps = json.optInt("number_of_steps", 50)
+                                    Pair(content, steps)
+                                } catch (e: Exception) {
+                                    throw Exception("Invalid JSON format: ${e.message}")
                                 }
-                                
-                                // Extract test_values from wrapper
-                                val root = JSONObject(conversionResult.jsonString!!)
-                                val testValuesStr = root.optJSONObject("test_values")?.toString() ?: "{}"
-                                
-                                Pair(conversionResult.jsonString!!, 50) // Always use 50 as default
-                            } ?: throw Exception("Cannot re-open CSV file")
-                        } else {
-                            // JSON/TXT file: use as-is (support both .json and .txt for backward compatibility)
-                            try {
-                                val json = JSONObject(content)
-                                // Validate it has the required structure
-                                if (!json.has("test_values")) {
-                                    throw Exception("Invalid format: missing 'test_values'")
-                                }
-                                val steps = json.optInt("number_of_steps", 50)
-                                Pair(content, steps)
-                            } catch (e: Exception) {
-                                throw Exception("Invalid JSON format: ${e.message}")
                             }
-                        }
 
-                        // Parse the final JSON
-                        val json = JSONObject(jsonContent)
-                        val numberOfSteps = json.optInt("number_of_steps", actualSteps)
-                        val additionalNotes = json.optString("additional_notes", fileName)
+                            // Parse the final JSON
+                            val json = JSONObject(jsonContent)
+                            val numberOfSteps = json.optInt("number_of_steps", actualSteps)
+                            val additionalNotes = json.optString("additional_notes", fileName)
 
                         // Persist a copy inside internal storage
                         val timestamp = System.currentTimeMillis()
                         val calendar = java.util.Calendar.getInstance().apply { timeInMillis = timestamp }
+                        
+                        // Generate unique filename using timestamp + milliseconds + UUID to prevent collisions
+                        val uniqueId = java.util.UUID.randomUUID().toString().substring(0, 8)
                         val internalFileName = String.format(
-                            "%04d-%02d-%02d_%02d:%02d:%02d.json",
+                            "%04d-%02d-%02d_%02d:%02d:%02d_%03d_%s.json",
                             calendar.get(java.util.Calendar.YEAR),
                             calendar.get(java.util.Calendar.MONTH) + 1,
                             calendar.get(java.util.Calendar.DAY_OF_MONTH),
                             calendar.get(java.util.Calendar.HOUR_OF_DAY),
                             calendar.get(java.util.Calendar.MINUTE),
-                            calendar.get(java.util.Calendar.SECOND)
+                            calendar.get(java.util.Calendar.SECOND),
+                            timestamp % 1000,  // milliseconds
+                            uniqueId           // unique identifier
                         )
-                        val file = File(applicationContext.filesDir, internalFileName)
-                        file.writeText(jsonContent)
+                        
+                        // Additional safety: check if file exists (should never happen with UUID)
+                        createdFile = File(applicationContext.filesDir, internalFileName)
+                        if (createdFile!!.exists()) {
+                            throw Exception("File already exists: $internalFileName (this should never happen)")
+                        }
+                        
+                        // Write file to disk
+                        createdFile!!.writeText(jsonContent)
+                        android.util.Log.d("MainActivity", "File written: $internalFileName (${createdFile.length()} bytes)")
 
                         // Save only metadata in DB - sensor data stays in file
                         val entity = com.example.steplab.data.local.EntityTest(
@@ -220,8 +239,29 @@ class MainActivity : AppCompatActivity() {
                             recordedAt = timestamp
                         )
                         StepLabApplication.database.databaseDao()?.insertTest(entity)
+                        android.util.Log.i("MainActivity", "Test imported successfully: $fileName → $internalFileName")
 
                         ImportResult(true, fileName, null)
+                        
+                        } catch (e: Exception) {                     
+                            // Delete file if it was created
+                            createdFile?.let { file ->
+                                if (file.exists()) {
+                                    try {
+                                        file.delete()
+                                        android.util.Log.w("MainActivity", "Rolled back file creation: ${file.name}")
+                                    } catch (deleteException: Exception) {
+                                        android.util.Log.e("MainActivity", "Failed to delete file during rollback", deleteException)
+                                    }
+                                }
+                            }
+                            
+                            // Database insert uses OnConflictStrategy.ABORT now, 
+                            // so it won't insert if there's a conflict
+                            
+                            // Re-throw exception to be caught by runCatching
+                            throw e
+                        }
                     }
 
                     importResults.add(

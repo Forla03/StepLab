@@ -12,7 +12,7 @@ interface DatabaseDao {
     @Query("SELECT * FROM EntityTest")
     suspend fun getAllTests(): List<EntityTest>
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertTest(newTest: EntityTest)
 
     @Query("DELETE FROM EntityTest WHERE testId = :id")

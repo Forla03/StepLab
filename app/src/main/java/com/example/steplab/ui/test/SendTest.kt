@@ -45,19 +45,46 @@ class SendTest : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val testList = StepLabApplication.database.databaseDao()?.getAllTests()
+                var orphanedCount = 0
+                
                 testList?.forEach { test ->
-                    // Load only metadata - sensor data will be read from file when needed
-                    dataset.add(
-                        CardTest(
-                            test.testId.toString(),
-                            "", // testValues no longer stored in database
-                            test.numberOfSteps ?: 0,
-                            test.additionalNotes ?: "",
-                            test.fileName ?: ""
+                    // Verify file integrity - only add tests with existing files
+                    val file = File(applicationContext.filesDir, test.fileName)
+                    if (file.exists()) {
+                        // Load only metadata - sensor data will be read from file when needed
+                        dataset.add(
+                            CardTest(
+                                test.testId.toString(),
+                                "", // testValues no longer stored in database
+                                test.numberOfSteps ?: 0,
+                                test.additionalNotes ?: "",
+                                test.fileName ?: ""
+                            )
                         )
-                    )
+                    } else {
+                        // File missing - orphaned database record
+                        orphanedCount++
+                        android.util.Log.w(
+                            "SendTest",
+                            "Orphaned test found: testId=${test.testId}, missing file: ${test.fileName}"
+                        )
+                        // Optionally: delete orphaned record from database
+                        // StepLabApplication.database.databaseDao()?.deleteTest(test.testId)
+                    }
                 }
+                
                 adapter.notifyDataSetChanged()
+                
+                // Notify user if orphaned tests were found
+                if (orphanedCount > 0) {
+                    runOnUiThread {
+                        android.widget.Toast.makeText(
+                            this@SendTest,
+                            "Warning: $orphanedCount test(s) have missing files and were not loaded",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -102,10 +129,18 @@ class SendTest : AppCompatActivity() {
 
     private fun exportTests(exportAsCsv: Boolean) {
         filesToShare.clear()
+        var failedExports = 0
 
         dataset.forEach { card ->
             if (card.selected) {
                 val file = File(applicationContext.filesDir, card.filePathName)
+                
+                // Verify file exists before attempting export
+                if (!file.exists()) {
+                    failedExports++
+                    android.util.Log.e("SendTest", "Cannot export test ${card.testId}: file not found: ${card.filePathName}")
+                    return@forEach
+                }
                 
                 try {
                     if (exportAsCsv) {
@@ -116,6 +151,8 @@ class SendTest : AppCompatActivity() {
                         exportTestAsJson(card, file)
                     }
                 } catch (e: Exception) {
+                    failedExports++
+                    android.util.Log.e("SendTest", "Failed to export test ${card.testId}", e)
                     e.printStackTrace()
                 }
             }
@@ -129,6 +166,13 @@ class SendTest : AppCompatActivity() {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
             startActivity(Intent.createChooser(shareIntent, "Share test files via"))
+        } else if (failedExports > 0) {
+            // Show error if no files were successfully exported
+            android.widget.Toast.makeText(
+                this,
+                "Failed to export $failedExports test(s). Files may be missing.",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
         }
     }
 
